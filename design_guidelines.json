@@ -1,0 +1,120 @@
+{
+  "theme": "dark",
+  "archetype": "7 (Electric & Neon)",
+  "rationale": "App is an AI-powered creation platform (AiForge). It requires a futuristic, highly energetic, premium feel. Using Deep Void Black as a matte base to ground vibrant neon cyan, green, and purple accents, avoiding 'cheap laser tag' by relying on crystal glassmorphism and subtle particles.",
+  "colors": {
+    "background_base": "#030305",
+    "surface_matte": "#0A0A0E",
+    "surface_elevated": "#121216",
+    "accent_cyan": "#00F0FF",
+    "accent_green": "#00FF66",
+    "accent_purple": "#B026FF",
+    "gradient_primary": "bg-gradient-to-r from-[#00F0FF] via-[#00FF66] to-[#B026FF]",
+    "gradient_image_tag": "bg-gradient-to-br from-green-500 to-green-900",
+    "gradient_video_tag": "bg-gradient-to-br from-cyan-500 to-cyan-900",
+    "gradient_3d_tag": "bg-gradient-to-br from-purple-500 to-purple-900",
+    "text_primary": "#FFFFFF",
+    "text_secondary": "#A1A1AA",
+    "border_subtle": "rgba(255, 255, 255, 0.1)"
+  },
+  "typography": {
+    "headings": {
+      "family": "Unbounded",
+      "weights": ["400", "700", "900"],
+      "tracking": "tracking-tight"
+    },
+    "body": {
+      "family": "Outfit",
+      "weights": ["300", "400", "500"]
+    },
+    "scale": {
+      "h1": "text-4xl sm:text-5xl font-black tracking-tighter",
+      "h2": "text-2xl sm:text-3xl font-bold tracking-tight",
+      "h3": "text-xl font-bold",
+      "body": "text-sm sm:text-base text-zinc-400",
+      "label": "text-xs font-bold tracking-[0.2em] uppercase"
+    }
+  },
+  "spacing_and_layout": {
+    "philosophy": "Mobile-first, dense but readable card layouts. Bottom navigation fixed to viewport. Viewport is restricted to max-w-md mx-auto for desktop to simulate mobile app feel, or responsive grid if full screen.",
+    "paddings": {
+      "screen": "p-4 sm:p-6",
+      "card_internal": "p-6",
+      "section_gap": "gap-8 sm:gap-12"
+    },
+    "grid": {
+      "bento_mobile": "grid grid-cols-1 gap-4",
+      "bento_desktop": "grid grid-cols-2 md:grid-cols-4 gap-6"
+    }
+  },
+  "surface_strategies": {
+    "crystal_glass": {
+      "classes": "bg-black/40 backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_rgba(0,240,255,0.05)]",
+      "usage": "Bottom Navigation, Fixed Headers, Detail Overlays, Modals"
+    },
+    "cards": {
+      "classes": "bg-[#0A0A0E] rounded-3xl border border-white/5 overflow-hidden hover:border-white/15 transition-colors",
+      "usage": "Category Cards, Recent Creation items, Pricing Tiers"
+    },
+    "tracing_beam_card": {
+      "classes": "relative overflow-hidden rounded-3xl bg-[#0A0A0E] border border-transparent before:absolute before:inset-0 before:-z-10 before:p-[1px] before:bg-gradient-to-r before:from-[#00F0FF] before:via-[#00FF66] before:to-[#B026FF] before:rounded-3xl before:content-['']",
+      "usage": "Neon Pro Pricing Tier, Upgrade CTA"
+    }
+  },
+  "animations": {
+    "particles": "Use TSParticles or Framer Motion to create a slow-moving, subtle starry nebula background behind the main content area.",
+    "page_transitions": "Framer Motion slide up (y: 20, opacity: 0 -> y: 0, opacity: 1) with spring physics.",
+    "hover_states": "Cards lift slightly (-translate-y-1) and inner glow intensifies.",
+    "energetic_edges": "Use a rotating conic-gradient mask on the border of the main 'Create' button to simulate lightning/energy running along the edge."
+  },
+  "components": {
+    "bottom_navigation": {
+      "style": "Fixed bottom-0 left-0 right-0 z-50 p-4 pb-safe crystal_glass rounded-t-3xl flex justify-between items-center",
+      "items": ["Home (House)", "Create (Sparkles, prominent/raised)", "Library (LayoutGrid)", "Plans (Crown)", "Profile (User)"]
+    },
+    "buttons": {
+      "primary": "bg-gradient-to-r from-[#00F0FF] via-[#00FF66] to-[#00F0FF] bg-[length:200%_auto] animate-gradient text-black font-black rounded-full px-8 py-4 uppercase tracking-wider shadow-[0_0_20px_rgba(0,255,102,0.4)]",
+      "secondary": "bg-white/10 text-white rounded-full px-6 py-3 font-semibold hover:bg-white/20 transition-colors border border-white/10",
+      "danger": "bg-red-500/20 text-red-500 border border-red-500/50 rounded-full px-4 py-2 hover:bg-red-500/30"
+    },
+    "icon_wrappers": {
+      "image": "relative z-10 p-3 rounded-2xl bg-green-500/10 text-green-400 before:absolute before:inset-0 before:bg-green-500/20 before:blur-xl before:-z-10",
+      "video": "relative z-10 p-3 rounded-2xl bg-cyan-500/10 text-cyan-400 before:absolute before:inset-0 before:bg-cyan-500/20 before:blur-xl before:-z-10",
+      "model3d": "relative z-10 p-3 rounded-2xl bg-purple-500/10 text-purple-400 before:absolute before:inset-0 before:bg-purple-500/20 before:blur-xl before:-z-10"
+    }
+  },
+  "iconography": "lucide-react",
+  "media": {
+    "image_urls": [
+      {
+        "url": "https://static.prod-images.emergentagent.com/jobs/03054408-b3a7-4c6e-b972-4db75114faff/images/444aea481b120e231c49219935adc3fd9a8b8440b9c2c7ff7dfe92cb63eda1d4.png",
+        "category": "background",
+        "description": "Deep void space nebula with subtle shooting stars. Use as fixed background behind the app with low opacity (0.3)."
+      },
+      {
+        "url": "https://static.prod-images.emergentagent.com/jobs/03054408-b3a7-4c6e-b972-4db75114faff/images/72a8c3021c8aa74fafedc6b28c6825fb75d6c7a89cf9aacc7d3f0ce551f1de56.png",
+        "category": "sample_image",
+        "description": "Futuristic Robot Portrait. Use in the Recent Creations carousel/library as an Image example."
+      },
+      {
+        "url": "https://static.prod-images.emergentagent.com/jobs/03054408-b3a7-4c6e-b972-4db75114faff/images/cd4763c1612a4f73f6c601215b984314b9398224b78fa3c0a6a397591dc4ca33.png",
+        "category": "sample_video",
+        "description": "Ocean Waves on an Alien Planet. Use in the Recent Creations carousel/library as a Video example."
+      },
+      {
+        "url": "https://static.prod-images.emergentagent.com/jobs/03054408-b3a7-4c6e-b972-4db75114faff/images/4dc9bd9e65fd1e8aa8d5f2a302febe009ae9672cd1f09115c8c0f4d557933404.png",
+        "category": "sample_3d",
+        "description": "3D Holographic glowing cube. Use in the Recent Creations carousel/library as a 3D Model example."
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "MUST load 'Unbounded' and 'Outfit' fonts via Google Fonts in index.html.",
+    "Build this as a mobile-first web app using standard React + Tailwind. Limit the max-width of the main container to 'max-w-md mx-auto' with a border-x border-white/10 to mimic a mobile phone viewport on desktop screens, or make it fully responsive if preferred.",
+    "Implement the background using fixed positioning and the provided nebula background image with opacity-30, overlaid with an absolute black-to-transparent gradient from the bottom.",
+    "Do NOT use generic Shadcn cards for the main feed. Use custom raw div layouts to achieve the glowing borders and specific internal paddings.",
+    "For the bottom navigation, ensure it is fixed to the bottom, uses backdrop-blur-2xl, and does not overlap content (add pb-24 to the main wrapper).",
+    "All interactive elements MUST have `data-testid` attributes (e.g., data-testid='start-creating-btn').",
+    "Integrate Shadcn primitives (Dialog, Select, Form) only for complex functional UI like Login/Settings/Pricing billing toggles. Custom-style them to fit the dark neon theme."
+  ]
+}
