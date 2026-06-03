@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { api, User } from '@/src/api/client';
 
 type AuthCtx = {
@@ -17,7 +17,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     try {
       const token = await api.getToken();
       if (!token) {
@@ -25,48 +25,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       const me = await api.me();
-      setUser(me);
+      setUser((prev) => {
+        if (
+          prev &&
+          prev.id === me.id &&
+          prev.plan === me.plan &&
+          prev.daily_used === me.daily_used &&
+          prev.daily_limit === me.daily_limit &&
+          prev.name === me.name &&
+          prev.picture === me.picture
+        ) {
+          return prev;
+        }
+        return me;
+      });
     } catch {
       await api.clearToken();
       setUser(null);
     }
-  };
+  }, []);
 
   useEffect(() => {
     (async () => {
       await refresh();
       setLoading(false);
     })();
-  }, []);
+  }, [refresh]);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string) => {
     const r = await api.login(email, password);
     await api.setToken(r.token);
     setUser(r.user);
-  };
+  }, []);
 
-  const signUp = async (email: string, password: string, name?: string) => {
+  const signUp = useCallback(async (email: string, password: string, name?: string) => {
     const r = await api.register(email, password, name);
     await api.setToken(r.token);
     setUser(r.user);
-  };
+  }, []);
 
-  const signInWithGoogleSession = async (sessionId: string) => {
+  const signInWithGoogleSession = useCallback(async (sessionId: string) => {
     const r = await api.googleAuth(sessionId);
     await api.setToken(r.token);
     setUser(r.user);
-  };
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     await api.clearToken();
     setUser(null);
-  };
+  }, []);
 
-  return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signInWithGoogleSession, signOut, refresh }}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({ user, loading, signIn, signUp, signInWithGoogleSession, signOut, refresh }),
+    [user, loading, signIn, signUp, signInWithGoogleSession, signOut, refresh],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
