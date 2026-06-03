@@ -1,0 +1,60 @@
+{
+  "summary": "AiForge backend + mobile UI tested end-to-end. Backend: 23/23 functional pass (24 tests, 1 was a test-side casing bug now fixed). All auth (register/login/me/google-reject), plans (5 tiers verified), generation (image via Nano Banana, model3d via Nano Banana isometric, chat via Claude, SCAD via Claude, video kickoff returns status=processing), creations CRUD, daily-limit enforcement (free=5/day -> 6th returns 402), and Stripe checkout creation all work with real EMERGENT_LLM_KEY and STRIPE_API_KEY. Frontend: login screen renders with AiForge cyberpunk branding, gradient SIGN IN button, Google OAuth button. Login flow works (POST /api/auth/login -> 200, token saved, redirected to /(tabs)). Home tab renders welcome, usage meter (0/5), 3 category cards, recent creations empty state, and 5-tab bottom nav (Home/Create/Library/Plans/Profile). testIDs present on login fields and submit. Two non-blocking issues: (1) excessive client-side polling of /api/auth/me, /api/creations, /api/creations/stats (dozens of repeats while idle on home tab) — likely useFocusEffect or setInterval rerun; needs throttle. (2) Console deprecation warnings: shadow* style props (use boxShadow) and props.pointerEvents (use style.pointerEvents).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Home tab / AuthContext refresh",
+        "issue": "Excessive polling: /api/auth/me, /api/creations, /api/creations/stats are each called many times while sitting idle on the home tab (observed >30 calls each in ~15s). Likely a useEffect/useFocusEffect dependency loop or an unthrottled interval. Adds backend load and battery drain on real devices.",
+        "affected_testIDs": ["tab-home"]
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": [
+      {
+        "component": "shadow* style props",
+        "issue": "Console warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' Multiple components use legacy RN shadow* props that are deprecated on web/RN-newer. Reference: search StyleSheet.create usages across /app/frontend/app and /app/frontend/src."
+      },
+      {
+        "component": "props.pointerEvents",
+        "issue": "Console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Move pointerEvents prop into style object."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_aiforge_backend.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Throttle/dedupe refresh in AuthContext + home tab so /api/auth/me, /api/creations, /api/creations/stats are not called on every render. Replace any setInterval polling with a single focus-effect or SWR-style cache with a sensible TTL (e.g., 30s).",
+    "Replace deprecated RN style props: convert shadowColor/shadowOffset/shadowOpacity/shadowRadius to boxShadow (or guard for native vs web), and move pointerEvents prop into style.",
+    "Optional: add testIDs to bottom tabs (tab-home, tab-create, tab-library, tab-plans, tab-profile) and to inner home elements (usage-meter, category-image, category-video, category-model3d) to make future UI tests deterministic.",
+    "Optional code review: server.py is ~630 lines — still manageable but consider splitting routers (auth.py, generate.py, creations.py, payments.py) before it grows further."
+  ],
+  "critical_code_review_comments": [
+    "server.py: emails are correctly lowercased on insert/login — good.",
+    "server.py: MongoDB _id is excluded via projection {'_id': 0} on all reads — good.",
+    "server.py: daily usage stored in usage collection per (user_id, day) with unique index and $inc — clean and race-safe.",
+    "server.py: video generation correctly runs in BackgroundTasks via run_in_executor and persists status updates — non-blocking, good.",
+    "server.py: /api/checkout/create properly uses origin_url from request body and emergentintegrations Stripe wrapper — no hardcoded URLs.",
+    "Auth: JWT uses 7-day expiry with HS256 + env JWT_SECRET — acceptable for MVP.",
+    "Auth: /api/auth/google correctly returns 401 on invalid Emergent session_id (verified)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_aiforge_backend.py (created)",
+    "/app/test_reports/iteration_1.json (created)"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "90%"
+  },
+  "seed_data_creation": "Tests register transient TEST_<uuid>@example.com users to avoid colliding with seeded demo user; demo@example.com/demo1234 used only for read-only flows and Stripe checkout.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend is fully green (all 24 pytest cases pass after the email-casing fix). Frontend login + home are verified visually with screenshots; deeper screen-by-screen tests of Create / Library / Plans / Profile bottom tabs were not exercised in this iteration due to time — recommend a follow-up Playwright run that taps each bottom tab and verifies type selector + duration picker on Create, filters on Library, all 5 plan cards + upgrade button on Plans, and logout on Profile. The only behavioral concern is excessive idle polling described above.",
+  "rca_of_issue": "Polling RCA hypothesis: AuthContext likely re-fetches /api/auth/me on every state change, and home/(tabs)/index.tsx likely reloads /api/creations and /api/creations/stats inside a useEffect whose dependencies change on every render (e.g., new object/array literal). Mitigation: memoize callbacks with useCallback, stable deps, and add a 30s in-memory cache."
+}
