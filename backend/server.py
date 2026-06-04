@@ -298,6 +298,26 @@ async def me(user: dict = Depends(get_current_user)):
     return await user_to_out(user)
 
 
+@api.delete("/auth/me")
+async def delete_me(user: dict = Depends(get_current_user)):
+    """Permanently delete the authenticated user and all their data.
+
+    Required by Google Play Store Account Deletion policy (2024).
+    Removes user record, creations, usage history, chat sessions,
+    and payment records. The deletion is irreversible.
+    """
+    uid = user["user_id"]
+    await db.creations.delete_many({"user_id": uid})
+    await db.chat_sessions.delete_many({"user_id": uid})
+    await db.usage.delete_many({"user_id": uid})
+    await db.payments.delete_many({"user_id": uid})
+    # Clear any referrer pointers
+    await db.users.update_many({"referred_by": uid}, {"$unset": {"referred_by": ""}})
+    await db.users.delete_one({"user_id": uid})
+    logger.info(f"User {uid} ({user.get('email')}) permanently deleted via /auth/me DELETE")
+    return {"deleted": True}
+
+
 # ----- Referrals -----
 @api.get("/referrals/me")
 async def referrals_me(user: dict = Depends(get_current_user)):

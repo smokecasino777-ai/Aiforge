@@ -87,6 +87,9 @@ export const api = {
   async me() {
     return request<User>('/auth/me');
   },
+  async deleteMe() {
+    return request<{ deleted: boolean }>('/auth/me', { method: 'DELETE' });
+  },
   async setToken(token: string) {
     await storage.secureSet(TOKEN_KEY, token);
   },

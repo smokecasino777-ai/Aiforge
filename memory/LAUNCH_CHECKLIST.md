@@ -20,14 +20,21 @@
 - Add the URLs to the Play Console listing AND in the Profile screen's Privacy & Data row (currently a placeholder)
 - The policy must mention: data we collect (email, prompts, generated media), what we do with it, third-party services (Stripe, Emergent LLM, OpenAI/Anthropic/Google AI), and how users can delete their account
 
-### 4. Account-deletion flow (REQUIRED by Google Play as of 2024)
-- Profile → Privacy & Data → add a "Delete my account" option
-- I have left the row as a placeholder; tell me when you want me to wire `/api/auth/delete-me` and the UI.
+### 4. ✅ Account-deletion flow (DONE)
+Profile → bottom of screen → **Delete my account** button.
+- Backend endpoint: `DELETE /api/auth/me`
+- Cascade-deletes the user, all creations, chat sessions, daily usage records, and payment records.
+- Also unsets `referred_by` pointers from anyone the user referred.
+- Requires a confirmation dialog ("Delete forever") before firing.
 
-### 5. App icon & graphics
-- `/app/frontend/assets/images/icon.png` — replace with your hi-res 1024×1024 AiForge logo (no transparency, no rounded corners — Play handles it)
-- `/app/frontend/assets/images/adaptive-icon.png` — Android adaptive icon foreground (1024×1024 PNG with safe-zone padding)
-- Splash screen `/app/frontend/assets/images/splash-icon.png` — already set, dark BG matches `#020208`
+### 5. ✅ App icon & graphics (DONE — replaceable any time)
+The AiForge logo PNG you uploaded has been baked into:
+- `/app/frontend/assets/images/icon.png` (1024×1024, full-bleed, dark BG)
+- `/app/frontend/assets/images/adaptive-icon.png` (1024×1024, with 20 % safe-zone padding so Android can crop it for the round/squircle masks)
+- `/app/frontend/assets/images/favicon.png` (256×256 for web)
+- `/app/frontend/assets/images/splash-icon.png` (1024×1024 with 30 % padding for the splash screen)
+
+If you want a custom artwork later, drop a new PNG into those paths and rebuild. The Play Store **feature graphic 1024×500** still needs to be made manually (Canva works).
 
 ### 6. Play Store listing assets you'll need
 - Short description (≤80 chars): _"Forge AI images, videos, 3D & code. Multi-AI cyberpunk creation studio."_

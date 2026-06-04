@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Alert, Platform, Share } from 'reac
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { LogOut, Mail, Crown, BarChart2, Shield, Info, Gift, Share2, Copy } from 'lucide-react-native';
+import { LogOut, Mail, Crown, BarChart2, Shield, Info, Gift, Share2, Copy, Trash2 } from 'lucide-react-native';
 import StarryBackground from '@/src/components/StarryBackground';
 import GhostLogoBackground from '@/src/components/GhostLogoBackground';
 import GradientButton from '@/src/components/GradientButton';
@@ -74,6 +74,29 @@ export default function Profile() {
     } else {
       await Share.share({ message: referral.code });
     }
+  };
+
+  const onDeleteAccount = () => {
+    Alert.alert(
+      'Delete account permanently?',
+      'This will permanently erase your account, creations, library, chat history, and payment records. This action CANNOT be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete forever',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.deleteMe();
+              await signOut();
+              router.replace('/(auth)/login');
+            } catch (e: any) {
+              Alert.alert('Delete failed', e.message);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const meta = PLAN_META[user?.plan || 'free'] ?? PLAN_META.free;
@@ -219,6 +242,13 @@ export default function Profile() {
             style={{ marginTop: 14 }}
           />
 
+          <PressableScale onPress={onDeleteAccount} testID="delete-account-btn">
+            <View style={styles.dangerRow}>
+              <Trash2 size={14} color={colors.red} />
+              <Text style={styles.dangerText}>Delete my account</Text>
+            </View>
+          </PressableScale>
+
           <View style={{ height: 130 }} />
         </ScrollView>
       </SafeAreaView>
@@ -313,6 +343,15 @@ const styles = StyleSheet.create({
   },
   refStatValue: { color: colors.text, fontSize: 18, fontWeight: '900' },
   refStatLabel: { color: colors.textDim, fontSize: 10, marginTop: 2, fontWeight: '700' },
+  dangerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    marginTop: 4,
+  },
+  dangerText: { color: colors.red, fontSize: 12, fontWeight: '700', letterSpacing: 0.3 },
   menu: { gap: 4, marginTop: 6 },
   menuItem: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
