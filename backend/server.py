@@ -718,10 +718,18 @@ async def checkout_status(session_id: str, user: dict = Depends(get_current_user
     # cannot retrieve session) but the user has been redirected back here with
     # the session_id (only happens after Stripe confirms payment), and the
     # session was created recently and belongs to this authenticated user,
-    # accept it as paid. In production with real Stripe keys, this fallback
-    # is rarely hit because the real Stripe API supports retrieval AND the
-    # webhook also independently marks the payment paid.
-    if not paid and stripe_payment_status is None:
+    # accept it as paid.
+    #
+    # PRODUCTION SAFETY: this fallback is ONLY enabled when the sandbox key is
+    # configured. With a real `sk_live_…` key, the real Stripe API always
+    # supports retrieval, and the webhook independently marks payments paid —
+    # so we deliberately do not trust the redirect alone in production. This
+    # prevents a transient Stripe outage from granting a free upgrade.
+    if (
+        not paid
+        and stripe_payment_status is None
+        and STRIPE_API_KEY == "sk_test_emergent"
+    ):
         try:
             created = datetime.fromisoformat(pay["created_at"])
             if now_utc() - created < timedelta(hours=2):
