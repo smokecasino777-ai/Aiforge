@@ -63,3 +63,20 @@ AiForge is a cyberpunk-themed Android-ready Expo mobile app for AI-powered creat
 
 ## Test credentials
 See `/app/memory/test_credentials.md`.
+
+
+## v2.1 Changelog (this iteration)
+- **Owner Secrets page** at `/admin/secrets` for in-app Stripe key rotation. Admin-gated (`ADMIN_EMAIL` or first user). Validates the key against `api.stripe.com/v1/balance` before saving, writes atomically to `backend/.env`, and hot-swaps the in-process key with zero restart.
+- **Backend admin endpoints**: `GET /api/admin/me`, `GET/POST/DELETE /api/admin/stripe-key`.
+- **shadow* → boxShadow** swept across the frontend; zero deprecation warnings from our source.
+- **Onboarding tutorial**: 6-slide pager gated by `aiforge_onboarded` AsyncStorage flag.
+- **Interactive 3D SCAD viewer**: in-WebView Three.js scene that parses common OpenSCAD primitives (cube, sphere, cylinder + translate/rotate/scale/color/union/difference/intersection) into a rotatable mesh with **EXPORT STL** button.
+
+## How to rotate the Stripe key (no chat exposure!)
+1. Open Stripe Dashboard → **Developers → API keys → Reveal live key / Roll key**.
+2. In AiForge: **Profile → Owner · App Secrets**.
+3. Paste the freshly rolled `sk_live_…` key, tap **Save & Activate**.
+4. Backend validates against Stripe, writes to `.env`, hot-swaps — done. No restart, no chat exposure.
+
+## Owner admin
+- Default admin = oldest user (auto-promoted on first hit) OR whoever's email matches `ADMIN_EMAIL` in `.env`. Current: `demo@example.com`.
