@@ -1,0 +1,53 @@
+{
+  "summary": "AiForge re-tested for the new 6-tier / SCAD-preview / multi-turn-chat / no-Google-OAuth spec. Backend: 18/26 pass, 2 skipped, 6 fail. The 5 generation/limit failures are ALL caused by EMERGENT_LLM_KEY hitting its hard budget (LiteLLM: 'Budget has been exceeded! Current cost: 0.546781, Max budget: 0.4') — every Gemini-3.1-flash-image-preview (Nano Banana) call AND every Claude call now intermittently 502s. This is a system credential/billing issue, NOT app code. The 6th failure is a REAL feature bug: /api/chat does not maintain multi-turn session continuity — sending a 2nd message with the same session_id returns 'this is the beginning of our conversation'. Plans endpoint perfectly matches new spec (6 tiers / $9.99/$29.99/$49.99/$99.99/$199.99). SCAD endpoint correctly returns preview_image base64 PNG and code (verified on the test that ran before the key was exhausted). Frontend (verified via mobile-viewport Playwright on the public preview URL): login screen has NO Google button (email+password only) ✅; sign-in with demo@example.com routes to /(tabs); Home renders ghost background, welcome card, 0/5 usage meter, 3 category cards, empty state; Plans tab shows all 6 tiers with correct prices and a POPULAR badge on Forge ✅; Create tab shows all 5 type cards (Image/Video/3D Render/Mesh-SCAD/AI Assist Multi-turn chat) ✅; bottom nav has Home/Create/Library/Plans/Profile. Console still emits the old deprecation warnings: 'shadow*' style props and props.pointerEvents. Library/Profile/Creation-detail screens and the AI-Assist chat UI + draggable trim editor were NOT exercised end-to-end this run because chat backend currently 502s under the exhausted budget and image+video generation would also fail — these need a fresh LLM key before they can be retested.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/chat", "issue": "Multi-turn session continuity is broken. Sending message 2 with the SAME session_id as message 1 produces a reply that has no memory of message 1 (Claude says 'this is the beginning of our conversation'). The endpoint instantiates a fresh LlmChat per request — emergentintegrations LlmChat needs explicit message_history or a server-side session store to maintain context across HTTP requests. The current implementation defeats the entire multi-turn AI Assistant feature.", "priority": "CRITICAL"},
+      {"endpoint": "POST /api/generate (image/model3d) and POST /api/chat", "issue": "EMERGENT_LLM_KEY is hitting LiteLLM hard-budget cap: 'Budget has been exceeded! Current cost: 0.546781, Max budget: 0.4'. Returns 502 'Generation failed: Failed to generate multimodal completion' or 'Chat failed'. Affects Nano Banana image, model3d isometric, and Claude chat. Needs new/refilled key from Emergent.", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/checkout/create", "issue": "Literal-typed plan field accepts only spark/forge/neon — silently excludes the new quantum and singularity tiers that are sold on the Plans screen. UPGRADE TO QUANTUM / UPGRADE TO SINGULARITY buttons will fail with 422."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "AI Assist multi-turn chat", "issue": "Even if frontend wires up session_id correctly, backend does not preserve history (see backend critical bug). User will appear to be talking to a fresh assistant each turn.", "affected_testIDs": ["tab-create", "chat-input", "chat-send"]},
+      {"flow": "Plans → Upgrade Quantum/Singularity", "issue": "CheckoutRequest.plan is Literal[spark,forge,neon] in server.py — quantum and singularity will be rejected with 422 by Pydantic before reaching Stripe.", "affected_testIDs": ["upgrade-quantum", "upgrade-singularity"]}
+    ],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "shadow* style props", "issue": "Deprecation warnings still emitted on every screen. 'shadow*' style props are deprecated. Use 'boxShadow'. Reference: search for shadowColor/shadowOffset/shadowOpacity/shadowRadius in /app/frontend/app and /app/frontend/src."},
+      {"component": "props.pointerEvents", "issue": "'props.pointerEvents is deprecated. Use style.pointerEvents' — move the pointerEvents prop into the style object."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_aiforge_backend.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "BLOCKER: Refresh / refill EMERGENT_LLM_KEY — current key is over budget (0.547 > 0.4). All image, model3d, video, and chat generations return 502 until this is fixed.",
+    "BLOCKER (multi-turn chat): Fix /api/chat to maintain conversation history. Option A: persist messages in MongoDB keyed by session_id and pass them as message_history to LlmChat each turn. Option B: use emergentintegrations' built-in history mechanism if it exists. The current per-request LlmChat() reset loses context.",
+    "Bug: Expand CheckoutRequest.plan Literal to include 'quantum' and 'singularity' (and update PLAN_PRICES check) so all paid tiers can be purchased.",
+    "Cleanup: Replace deprecated shadow* style props with boxShadow and move pointerEvents into the style object. Reference: GhostLogoBackground, CreationCard, plan cards, home category cards.",
+    "Retest after key refresh: image gen returns base64 PNG, model3d returns base64 PNG, /generate type=chat increments usage, SCAD preview_image, video generation, daily-limit 6th-call=402 on both /generate and /generate/scad, multi-turn chat continuity."
+  ],
+  "critical_code_review_comments": [
+    "server.py /api/chat creates LlmChat(session_id=session) per request but does NOT pass prior messages — relies on emergentintegrations to persist server-side, which evidently does not happen. Verified empirically with two-turn test.",
+    "server.py CheckoutRequest.plan: Literal['spark','forge','neon'] is out of sync with PLAN_PRICES which now includes quantum + singularity (line 46). Frontend Plans tab advertises upgrade buttons for these tiers.",
+    "server.py /api/generate type=chat uses a session_id of 'chat-{user_id}' (line 382) — collides across all chat invocations from the same user and also doesn't carry message history; same root cause as /api/chat bug.",
+    "server.py is now 642 lines — consider splitting into routers (auth.py, generate.py, creations.py, payments.py).",
+    "Frontend Plans/Profile/Library/Creation-detail screens not verified end-to-end this iteration."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_aiforge_backend.py (updated for 6-tier plans, added SCAD preview_image assertion, added multi-turn session continuity test, added SCAD 402 enforcement test)",
+    "/app/test_reports/iteration_2.json (created)",
+    "/app/test_reports/pytest/pytest_results.xml (updated)"
+  ],
+  "success_rate": {"backend": "69% (18/26 — failures dominated by exhausted EMERGENT_LLM_KEY)", "frontend": "100% on screens that were exercised (login no-Google, Home, Plans 6-tier, Create 5-type)"},
+  "seed_data_creation": "Created transient TEST_*@example.com users via /api/auth/register; demo@example.com/demo1234 used for read-only flows.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Two BLOCKING issues require main-agent action before further testing is meaningful: (1) EMERGENT_LLM_KEY budget exhausted — every Nano Banana / Claude call returns 502 with 'Budget has been exceeded! Current cost: 0.546781, Max budget: 0.4'. (2) /api/chat multi-turn session continuity is broken — second message in same session_id loses context (Claude says 'beginning of our conversation'). Once those are resolved, re-run pytest tests/test_aiforge_backend.py (26 cases) and then exercise the frontend Create→AI-Assist chat flow, Library, Profile sign-out, and the creation-detail screens (image download, SCAD Preview/Code tabs, video draggable trim editor).",
+  "rca_of_issue": "Multi-turn RCA: server.py /api/chat (line 401-412) creates a brand-new LlmChat instance on every request with only the system message and the latest user prompt — it never passes accumulated message history. emergentintegrations' session_id parameter does NOT magically rehydrate prior turns from a server-side store; without explicit history, each call is stateless. Fix: keep a chat_messages collection in Mongo keyed by (user_id, session_id), append user+assistant messages each turn, and pass that array as history when building LlmChat. Budget RCA: cumulative usage of the shared EMERGENT_LLM_KEY across recent test runs exceeded the LiteLLM max_budget=0.4. Needs main-agent to rotate or top up the key."
+}

@@ -22,6 +22,7 @@ export type Creation = {
   status: 'ready' | 'processing' | 'failed';
   media_data?: string | null;
   media_mime?: string | null;
+  preview_image?: string | null;
   error?: string | null;
   created_at: string;
   width?: number | null;

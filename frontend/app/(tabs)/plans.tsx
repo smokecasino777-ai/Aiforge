@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
-import { Crown, Check, Sparkles, Zap, Flame, Infinity as InfinityIcon } from 'lucide-react-native';
+import { Crown, Check, Sparkles, Zap, Flame, Infinity as InfinityIcon, Rocket } from 'lucide-react-native';
 import StarryBackground from '@/src/components/StarryBackground';
 import GhostLogoBackground from '@/src/components/GhostLogoBackground';
 import GradientButton from '@/src/components/GradientButton';
@@ -26,6 +26,7 @@ const ICONS: Record<string, any> = {
   forge: Flame,
   neon: Crown,
   quantum: InfinityIcon,
+  singularity: Rocket,
 };
 
 export default function Plans() {

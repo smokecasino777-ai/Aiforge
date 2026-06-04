@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,9 @@ import {
   Sparkles,
   Wand2,
   Hammer,
+  Send,
+  Bot,
+  User as UserIcon,
 } from 'lucide-react-native';
 import StarryBackground from '@/src/components/StarryBackground';
 import GhostLogoBackground from '@/src/components/GhostLogoBackground';
@@ -36,7 +39,7 @@ const TYPES: { id: GenType; label: string; sub: string; color: string; Icon: any
   { id: 'video', label: 'Video', sub: 'Text → motion', color: colors.cyan, Icon: Video },
   { id: 'model3d', label: '3D Render', sub: 'Isometric render', color: colors.purple, Icon: Box },
   { id: 'scad', label: 'Mesh / SCAD', sub: 'STL-ready code', color: colors.red, Icon: Hammer },
-  { id: 'chat', label: 'AI Assist', sub: 'Prompt coach', color: colors.yellow, Icon: MessageSquare },
+  { id: 'chat', label: 'AI Assist', sub: 'Multi-turn chat', color: colors.yellow, Icon: MessageSquare },
 ];
 
 const DURATIONS = [4, 8, 12];
@@ -65,9 +68,11 @@ const PROMPT_IDEAS: Record<GenType, string[]> = {
   chat: [
     'Give me 5 epic image prompts for a cyberpunk theme',
     'How do I describe motion for a video prompt?',
-    'Help me write a 3D model description for jewelry',
+    'Help me design a 3D ring with cyberpunk details',
   ],
 };
+
+type ChatMsg = { role: 'user' | 'assistant'; text: string };
 
 export default function CreateScreen() {
   const router = useRouter();
@@ -76,10 +81,38 @@ export default function CreateScreen() {
   const [prompt, setPrompt] = useState('');
   const [duration, setDuration] = useState<number>(4);
   const [loading, setLoading] = useState(false);
-  const [chatReply, setChatReply] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [chatSession, setChatSession] = useState<string | undefined>();
+  const chatScrollRef = useRef<ScrollView>(null);
 
   const remaining = Math.max(0, (user?.daily_limit ?? 0) - (user?.daily_used ?? 0));
   const overLimit = remaining === 0;
+
+  const sendChat = async () => {
+    const text = prompt.trim();
+    if (!text) return;
+    if (overLimit) {
+      Alert.alert('Daily limit hit', 'Upgrade your plan for more.', [
+        { text: 'Later', style: 'cancel' },
+        { text: 'See plans', onPress: () => router.push('/(tabs)/plans') },
+      ]);
+      return;
+    }
+    setMessages((m) => [...m, { role: 'user', text }]);
+    setPrompt('');
+    setLoading(true);
+    try {
+      const r = await api.chat(text, chatSession);
+      setChatSession(r.session_id);
+      setMessages((m) => [...m, { role: 'assistant', text: r.reply }]);
+      await refresh();
+      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 80);
+    } catch (e: any) {
+      Alert.alert('Chat failed', e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const onGenerate = async () => {
     if (!prompt.trim()) {
@@ -94,20 +127,13 @@ export default function CreateScreen() {
       return;
     }
     setLoading(true);
-    setChatReply(null);
     try {
-      if (type === 'chat') {
-        const r = await api.chat(prompt);
-        setChatReply(r.reply);
-        await refresh();
-        return;
-      }
       let creation;
       if (type === 'scad') {
         creation = await api.generateScad(prompt);
       } else {
         creation = await api.generate({
-          type,
+          type: type as 'image' | 'video' | 'model3d',
           prompt,
           duration: type === 'video' ? duration : undefined,
         });
@@ -140,7 +166,10 @@ export default function CreateScreen() {
               <View
                 style={[
                   styles.creditChip,
-                  { borderColor: overLimit ? colors.red + '88' : colors.green + '66', backgroundColor: overLimit ? colors.red + '15' : colors.green + '15' },
+                  {
+                    borderColor: overLimit ? colors.red + '88' : colors.green + '66',
+                    backgroundColor: overLimit ? colors.red + '15' : colors.green + '15',
+                  },
                 ]}
                 testID="credit-chip"
               >
@@ -181,98 +210,229 @@ export default function CreateScreen() {
               ))}
             </View>
 
-            <Text style={styles.section}>Describe it</Text>
-            <View style={styles.promptBox}>
-              <TextInput
-                testID="prompt-input"
-                value={prompt}
-                onChangeText={setPrompt}
-                placeholder={`Eg. ${PROMPT_IDEAS[type][0]}`}
-                placeholderTextColor={colors.textMuted}
-                style={styles.promptInput}
-                multiline
-                numberOfLines={5}
-                textAlignVertical="top"
+            {type === 'chat' ? (
+              <ChatPanel
+                messages={messages}
+                prompt={prompt}
+                setPrompt={setPrompt}
+                onSend={sendChat}
+                loading={loading}
+                scrollRef={chatScrollRef}
+                onPickIdea={(p) => setPrompt(p)}
+                ideas={PROMPT_IDEAS.chat}
               />
-            </View>
-
-            <View style={styles.ideas}>
-              {PROMPT_IDEAS[type].map((p) => (
-                <PressableScale
-                  key={p}
-                  onPress={() => setPrompt(p)}
-                  style={styles.ideaChip}
-                  testID={`idea-${p.slice(0, 12)}`}
-                >
-                  <Text style={styles.ideaText} numberOfLines={1}>
-                    ✦ {p}
-                  </Text>
-                </PressableScale>
-              ))}
-            </View>
-
-            {type === 'video' ? (
+            ) : (
               <>
-                <Text style={styles.section}>Duration</Text>
-                <View style={styles.durRow}>
-                  {DURATIONS.map((d) => (
+                <Text style={styles.section}>Describe it</Text>
+                <View style={styles.promptBox}>
+                  <TextInput
+                    testID="prompt-input"
+                    value={prompt}
+                    onChangeText={setPrompt}
+                    placeholder={`Eg. ${PROMPT_IDEAS[type][0]}`}
+                    placeholderTextColor={colors.textMuted}
+                    style={styles.promptInput}
+                    multiline
+                    numberOfLines={5}
+                    textAlignVertical="top"
+                  />
+                </View>
+
+                <View style={styles.ideas}>
+                  {PROMPT_IDEAS[type].map((p) => (
                     <PressableScale
-                      key={d}
-                      onPress={() => setDuration(d)}
-                      style={{ flex: 1 }}
-                      testID={`dur-${d}`}
+                      key={p}
+                      onPress={() => setPrompt(p)}
+                      style={styles.ideaChip}
+                      testID={`idea-${p.slice(0, 12)}`}
                     >
-                      <View
-                        style={[
-                          styles.durChip,
-                          duration === d && { borderColor: colors.cyan, backgroundColor: colors.cyan + '20' },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.durText,
-                            duration === d && { color: colors.cyan, fontWeight: '900' },
-                          ]}
-                        >
-                          {d}s
-                        </Text>
-                      </View>
+                      <Text style={styles.ideaText} numberOfLines={1}>
+                        ✦ {p}
+                      </Text>
                     </PressableScale>
                   ))}
                 </View>
-                <Text style={styles.helper}>
-                  Sora 2 supports 4 / 8 / 12 seconds. Use the in-library editor to trim & loop up to 1 minute.
-                </Text>
-              </>
-            ) : null}
 
-            <GradientButton
-              title={loading ? 'Forging…' : 'Forge It'}
-              onPress={onGenerate}
-              loading={loading}
-              icon={<Sparkles size={16} color="#000" />}
-              testID="generate-btn"
-              style={{ marginTop: 18 }}
-            />
+                {type === 'video' ? (
+                  <>
+                    <Text style={styles.section}>Duration</Text>
+                    <View style={styles.durRow}>
+                      {DURATIONS.map((d) => (
+                        <PressableScale
+                          key={d}
+                          onPress={() => setDuration(d)}
+                          style={{ flex: 1 }}
+                          testID={`dur-${d}`}
+                        >
+                          <View
+                            style={[
+                              styles.durChip,
+                              duration === d && { borderColor: colors.cyan, backgroundColor: colors.cyan + '20' },
+                            ]}
+                          >
+                            <Text
+                              style={[styles.durText, duration === d && { color: colors.cyan, fontWeight: '900' }]}
+                            >
+                              {d}s
+                            </Text>
+                          </View>
+                        </PressableScale>
+                      ))}
+                    </View>
+                    <Text style={styles.helper}>
+                      Sora 2 supports 4 / 8 / 12s. Use the in-library editor to trim & loop up to 60s.
+                    </Text>
+                  </>
+                ) : null}
 
-            {type === 'chat' && chatReply ? (
-              <View style={styles.chatCard}>
-                <LinearGradient
-                  colors={[colors.yellow + '22', 'transparent']}
-                  style={[StyleSheet.absoluteFill, { borderRadius: radius.lg }]}
+                <GradientButton
+                  title={loading ? 'Forging…' : 'Forge It'}
+                  onPress={onGenerate}
+                  loading={loading}
+                  icon={<Sparkles size={16} color="#000" />}
+                  testID="generate-btn"
+                  style={{ marginTop: 18 }}
                 />
-                <View style={styles.chatHeader}>
-                  <Sparkles size={14} color={colors.yellow} />
-                  <Text style={styles.chatHeaderText}>AiForge Assistant</Text>
-                </View>
-                <Text style={styles.chatBody}>{chatReply}</Text>
-              </View>
-            ) : null}
+              </>
+            )}
 
-            <View style={{ height: 120 }} />
+            <View style={{ height: 140 }} />
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+    </View>
+  );
+}
+
+function ChatPanel({
+  messages,
+  prompt,
+  setPrompt,
+  onSend,
+  loading,
+  scrollRef,
+  onPickIdea,
+  ideas,
+}: {
+  messages: ChatMsg[];
+  prompt: string;
+  setPrompt: (s: string) => void;
+  onSend: () => void;
+  loading: boolean;
+  scrollRef: React.RefObject<ScrollView | null>;
+  onPickIdea: (p: string) => void;
+  ideas: string[];
+}) {
+  return (
+    <View style={styles.chatWrap}>
+      <View style={styles.chatHeader}>
+        <LinearGradient
+          colors={[colors.yellow, '#FFB700']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.chatAvatar}
+        >
+          <Bot size={16} color="#000" strokeWidth={2.5} />
+        </LinearGradient>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.chatTitle}>AiForge Assistant</Text>
+          <Text style={styles.chatSub}>Ask me anything — I help craft prompts, ideas & code.</Text>
+        </View>
+      </View>
+
+      <ScrollView
+        ref={scrollRef}
+        style={styles.chatList}
+        contentContainerStyle={{ padding: 10, gap: 10 }}
+        nestedScrollEnabled
+        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+      >
+        {messages.length === 0 ? (
+          <View style={styles.chatEmpty}>
+            <Text style={styles.chatEmptyTitle}>Hi, I&apos;m your creative co-pilot.</Text>
+            <Text style={styles.chatEmptyText}>Try one of these to get started:</Text>
+            <View style={{ gap: 8, marginTop: 6 }}>
+              {ideas.map((i) => (
+                <PressableScale
+                  key={i}
+                  onPress={() => onPickIdea(i)}
+                  testID={`chat-idea-${i.slice(0, 10)}`}
+                >
+                  <View style={styles.chatIdea}>
+                    <Sparkles size={12} color={colors.yellow} />
+                    <Text style={styles.chatIdeaText}>{i}</Text>
+                  </View>
+                </PressableScale>
+              ))}
+            </View>
+          </View>
+        ) : null}
+        {messages.map((m, i) => (
+          <View
+            key={i}
+            style={[styles.bubbleRow, m.role === 'user' && { justifyContent: 'flex-end' }]}
+          >
+            {m.role === 'assistant' ? (
+              <View style={styles.bubbleAvatar}>
+                <Bot size={12} color={colors.yellow} />
+              </View>
+            ) : null}
+            <View
+              style={[
+                styles.bubble,
+                m.role === 'user' ? styles.bubbleUser : styles.bubbleAi,
+              ]}
+            >
+              <Text style={[styles.bubbleText, m.role === 'user' && { color: '#000' }]}>
+                {m.text}
+              </Text>
+            </View>
+            {m.role === 'user' ? (
+              <View style={[styles.bubbleAvatar, { backgroundColor: colors.cyan + '22' }]}>
+                <UserIcon size={12} color={colors.cyan} />
+              </View>
+            ) : null}
+          </View>
+        ))}
+        {loading ? (
+          <View style={styles.bubbleRow}>
+            <View style={styles.bubbleAvatar}>
+              <Bot size={12} color={colors.yellow} />
+            </View>
+            <View style={[styles.bubble, styles.bubbleAi]}>
+              <Text style={styles.bubbleText}>Thinking…</Text>
+            </View>
+          </View>
+        ) : null}
+      </ScrollView>
+
+      <View style={styles.chatInputRow}>
+        <View style={styles.chatInputBox}>
+          <TextInput
+            testID="chat-input"
+            value={prompt}
+            onChangeText={setPrompt}
+            placeholder="Ask the Assistant…"
+            placeholderTextColor={colors.textMuted}
+            style={styles.chatInput}
+            multiline
+          />
+        </View>
+        <PressableScale
+          onPress={onSend}
+          haptic
+          testID="chat-send"
+        >
+          <LinearGradient
+            colors={[colors.yellow, '#FFB700']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.sendBtn}
+          >
+            <Send size={18} color="#000" strokeWidth={2.5} />
+          </LinearGradient>
+        </PressableScale>
+      </View>
     </View>
   );
 }
@@ -283,7 +443,10 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { color: colors.text, fontSize: 28, fontWeight: '900', letterSpacing: -0.5 },
-  creditChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.pill, borderWidth: 1 },
+  creditChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.pill, borderWidth: 1,
+  },
   creditText: { fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
   section: { color: colors.textMuted, fontSize: 11, letterSpacing: 1.5, fontWeight: '800', textTransform: 'uppercase', marginTop: 12 },
   typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
@@ -329,16 +492,88 @@ const styles = StyleSheet.create({
   },
   durText: { color: colors.textDim, fontSize: 14, fontWeight: '700' },
   helper: { color: colors.textMuted, fontSize: 11, marginTop: -4 },
-  chatCard: {
-    marginTop: 18,
-    padding: 16,
+  // chat
+  chatWrap: {
     backgroundColor: colors.bgElev,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: colors.yellow + '44',
     overflow: 'hidden',
+    marginTop: 12,
   },
-  chatHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-  chatHeaderText: { color: colors.yellow, fontSize: 11, fontWeight: '900', letterSpacing: 1, textTransform: 'uppercase' },
-  chatBody: { color: colors.text, fontSize: 14, lineHeight: 21 },
+  chatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: 'rgba(255,214,10,0.06)',
+  },
+  chatAvatar: {
+    width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
+  },
+  chatTitle: { color: colors.text, fontWeight: '800', fontSize: 14 },
+  chatSub: { color: colors.textDim, fontSize: 11, marginTop: 2 },
+  chatList: { maxHeight: 420, minHeight: 280 },
+  chatEmpty: { padding: 16, gap: 6 },
+  chatEmptyTitle: { color: colors.text, fontSize: 15, fontWeight: '800' },
+  chatEmptyText: { color: colors.textDim, fontSize: 12 },
+  chatIdea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 10,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  chatIdeaText: { color: colors.textDim, fontSize: 12, flex: 1 },
+  bubbleRow: { flexDirection: 'row', gap: 6, alignItems: 'flex-end' },
+  bubbleAvatar: {
+    width: 24, height: 24, borderRadius: 6,
+    backgroundColor: colors.yellow + '22',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  bubble: {
+    maxWidth: '80%',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 14,
+  },
+  bubbleAi: {
+    backgroundColor: 'rgba(255,214,10,0.08)',
+    borderColor: colors.yellow + '33',
+    borderWidth: 1,
+  },
+  bubbleUser: {
+    backgroundColor: colors.cyan,
+  },
+  bubbleText: { color: colors.text, fontSize: 13, lineHeight: 19 },
+  chatInputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    padding: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  chatInputBox: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    minHeight: 44,
+  },
+  chatInput: { color: colors.text, fontSize: 13, maxHeight: 100 },
+  sendBtn: {
+    width: 44, height: 44, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: colors.yellow, shadowOpacity: 0.7, shadowRadius: 10,
+  },
 });

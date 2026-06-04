@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -11,8 +11,6 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as WebBrowser from 'expo-web-browser';
-import * as Linking from 'expo-linking';
 import { useAuth } from '@/src/context/AuthContext';
 import StarryBackground from '@/src/components/StarryBackground';
 import GhostLogoBackground from '@/src/components/GhostLogoBackground';
@@ -20,34 +18,15 @@ import PulsingLogo from '@/src/components/Logo';
 import GradientButton from '@/src/components/GradientButton';
 import PressableScale from '@/src/components/PressableScale';
 import { colors, radius } from '@/src/theme/colors';
-import { Mail, Lock, Globe } from 'lucide-react-native';
+import { Mail, Lock } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-WebBrowser.maybeCompleteAuthSession();
 
 export default function Login() {
   const router = useRouter();
-  const { signIn, signInWithGoogleSession } = useAuth();
+  const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
-
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    const hash = typeof window !== 'undefined' ? window.location.hash : '';
-    if (!hash) return;
-    const m = hash.match(/session_id=([^&]+)/);
-    if (m && m[1]) {
-      const sid = decodeURIComponent(m[1]);
-      window.history.replaceState(null, '', window.location.pathname);
-      setGoogleLoading(true);
-      signInWithGoogleSession(sid)
-        .then(() => router.replace('/(tabs)'))
-        .catch((e) => Alert.alert('Google sign-in failed', e.message))
-        .finally(() => setGoogleLoading(false));
-    }
-  }, [signInWithGoogleSession, router]);
 
   const onLogin = async () => {
     if (!email || !password) {
@@ -62,34 +41,6 @@ export default function Login() {
       Alert.alert('Sign-in failed', e.message);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const onGoogle = async () => {
-    setGoogleLoading(true);
-    try {
-      const redirect =
-        Platform.OS === 'web'
-          ? (typeof window !== 'undefined' ? window.location.origin + '/login' : '')
-          : Linking.createURL('auth');
-      const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirect)}`;
-      if (Platform.OS === 'web') {
-        if (typeof window !== 'undefined') window.location.href = authUrl;
-        return;
-      }
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirect);
-      if (result.type !== 'success' || !result.url) {
-        setGoogleLoading(false);
-        return;
-      }
-      const m = result.url.match(/[#?]session_id=([^&]+)/);
-      if (!m) throw new Error('No session in callback URL');
-      await signInWithGoogleSession(decodeURIComponent(m[1]));
-      router.replace('/(tabs)');
-    } catch (e: any) {
-      Alert.alert('Google sign-in failed', e.message);
-    } finally {
-      setGoogleLoading(false);
     }
   };
 
@@ -147,21 +98,6 @@ export default function Login() {
                 style={{ marginTop: 18 }}
               />
 
-              <View style={styles.divider}>
-                <View style={styles.line} />
-                <Text style={styles.orText}>OR</Text>
-                <View style={styles.line} />
-              </View>
-
-              <GradientButton
-                title="Continue with Google"
-                onPress={onGoogle}
-                loading={googleLoading}
-                variant="outline"
-                icon={<Globe size={18} color={colors.text} />}
-                testID="google-signin"
-              />
-
               <PressableScale
                 onPress={() => router.push('/(auth)/register')}
                 style={{ marginTop: 22 }}
@@ -216,9 +152,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   input: { flex: 1, color: colors.text, fontSize: 15 },
-  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 12 },
-  line: { flex: 1, height: 1, backgroundColor: colors.border },
-  orText: { color: colors.textMuted, fontSize: 11, letterSpacing: 1.5, fontWeight: '700' },
   linkText: { color: colors.textDim, textAlign: 'center', fontSize: 13 },
   linkAccent: { color: colors.green, fontWeight: '700' },
   footer: { alignItems: 'center' },

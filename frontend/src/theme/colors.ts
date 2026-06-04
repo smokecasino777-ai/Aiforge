@@ -37,5 +37,6 @@ export const PLAN_META: Record<string, { color: string; gradient: [string, strin
   spark: { color: colors.green, gradient: [colors.green, '#00B248'], icon: 'zap', tagline: 'Ignite creativity' },
   forge: { color: colors.cyan, gradient: [colors.cyan, '#0077B6'], icon: 'flame', tagline: 'Forge masterpieces' },
   neon: { color: colors.purple, gradient: [colors.purple, '#7B1FA2'], icon: 'crown', tagline: 'Pro-grade power' },
-  quantum: { color: colors.red, gradient: [colors.red, colors.purple], icon: 'infinity', tagline: 'Unlimited universe' },
+  quantum: { color: colors.pink, gradient: [colors.pink, colors.purple], icon: 'infinity', tagline: 'Quantum unlimited' },
+  singularity: { color: colors.red, gradient: [colors.red, colors.pink], icon: 'rocket', tagline: 'Beyond limits' },
 };

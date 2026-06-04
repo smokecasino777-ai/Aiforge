@@ -42,9 +42,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("aiforge")
 
 # ----- Plan config -----
-PLAN_LIMITS = {"free": 5, "spark": 30, "forge": 100, "neon": 500, "quantum": 9999}
-PLAN_PRICES = {"spark": 4.99, "forge": 9.99, "neon": 19.99, "quantum": 39.99}
-PLAN_NAMES = {"free": "Free", "spark": "Spark", "forge": "Forge", "neon": "Neon Pro", "quantum": "Quantum"}
+PLAN_LIMITS = {"free": 5, "spark": 50, "forge": 200, "neon": 500, "quantum": 2000, "singularity": 99999}
+PLAN_PRICES = {"spark": 9.99, "forge": 29.99, "neon": 49.99, "quantum": 99.99, "singularity": 199.99}
+PLAN_NAMES = {"free": "Free", "spark": "Spark", "forge": "Forge", "neon": "Neon Pro", "quantum": "Quantum", "singularity": "Singularity"}
 
 # ----- Models -----
 class RegisterRequest(BaseModel):
@@ -92,6 +92,7 @@ class CreationOut(BaseModel):
     status: str  # "ready" | "processing" | "failed"
     media_data: Optional[str] = None  # base64
     media_mime: Optional[str] = None
+    preview_image: Optional[str] = None  # base64 PNG preview (e.g. for SCAD)
     error: Optional[str] = None
     created_at: str
     width: Optional[int] = None
@@ -320,6 +321,7 @@ def _doc_to_creation(doc: dict) -> CreationOut:
         status=doc.get("status", "ready"),
         media_data=doc.get("media_data"),
         media_mime=doc.get("media_mime"),
+        preview_image=doc.get("preview_image"),
         error=doc.get("error"),
         created_at=doc.get("created_at", iso(now_utc())),
         width=doc.get("width"),
@@ -416,7 +418,7 @@ class ScadRequest(BaseModel):
 
 @api.post("/generate/scad")
 async def generate_scad(req: ScadRequest, user: dict = Depends(get_current_user)):
-    """Generate OpenSCAD code for a 3D mesh from a description."""
+    """Generate OpenSCAD code for a 3D mesh from a description + isometric preview image."""
     plan = user.get("plan", "free")
     limit = PLAN_LIMITS.get(plan, 5)
     used = await daily_used(user["user_id"])
@@ -435,12 +437,19 @@ async def generate_scad(req: ScadRequest, user: dict = Depends(get_current_user)
         code = await chat.send_message(UserMessage(text=f"Generate OpenSCAD code for: {req.prompt}"))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"SCAD generation failed: {str(e)[:200]}")
-    # strip code fences if model added them
     code = code.strip()
     if code.startswith("```"):
         code = code.split("\n", 1)[1] if "\n" in code else code
         if code.endswith("```"):
             code = code.rsplit("```", 1)[0]
+
+    # Also generate an isometric preview image so the user can SEE the 3D object
+    preview_b64: Optional[str] = None
+    try:
+        preview_b64, _ = await _generate_image_sync(req.prompt, style_3d=True)
+    except Exception as e:
+        logger.warning(f"SCAD preview image failed: {e}")
+
     creation_id = f"cr_{uuid.uuid4().hex[:14]}"
     doc = {
         "creation_id": creation_id,
@@ -451,6 +460,7 @@ async def generate_scad(req: ScadRequest, user: dict = Depends(get_current_user)
         "status": "ready",
         "media_data": base64.b64encode(code.encode()).decode(),
         "media_mime": "application/x-openscad",
+        "preview_image": preview_b64,
         "created_at": iso(now_utc()),
         "scad_code": code,
     }
@@ -502,10 +512,11 @@ async def delete_creation(creation_id: str, user: dict = Depends(get_current_use
 async def plans_list():
     return [
         {"id": "free", "name": "Free", "price": 0.0, "limit": PLAN_LIMITS["free"], "features": ["5 generations / day", "Image, Video, 3D, Chat", "Save to Library", "Watermarked exports"]},
-        {"id": "spark", "name": "Spark", "price": PLAN_PRICES["spark"], "limit": PLAN_LIMITS["spark"], "features": ["30 generations / day", "No watermark", "Priority queue", "HD outputs"]},
-        {"id": "forge", "name": "Forge", "price": PLAN_PRICES["forge"], "limit": PLAN_LIMITS["forge"], "features": ["100 generations / day", "Fast priority lane", "4K image exports", "Mesh SCAD export", "Video up to 12s"]},
-        {"id": "neon", "name": "Neon Pro", "price": PLAN_PRICES["neon"], "limit": PLAN_LIMITS["neon"], "features": ["500 generations / day", "Top priority", "Commercial license", "Editor + extended trim", "Multi-AI assistant"]},
-        {"id": "quantum", "name": "Quantum", "price": PLAN_PRICES["quantum"], "limit": PLAN_LIMITS["quantum"], "features": ["Unlimited generations", "Fastest GPU lane", "All future models", "Beta features early", "Pro support"]},
+        {"id": "spark", "name": "Spark", "price": PLAN_PRICES["spark"], "limit": PLAN_LIMITS["spark"], "features": ["50 generations / day", "No watermark", "Priority queue", "HD outputs", "Save unlimited"]},
+        {"id": "forge", "name": "Forge", "price": PLAN_PRICES["forge"], "limit": PLAN_LIMITS["forge"], "features": ["200 generations / day", "Fast priority lane", "4K image exports", "Mesh SCAD export", "Video up to 12s", "CapCut-style editor"]},
+        {"id": "neon", "name": "Neon Pro", "price": PLAN_PRICES["neon"], "limit": PLAN_LIMITS["neon"], "features": ["500 generations / day", "Top priority", "Commercial license", "Advanced video editor", "Multi-AI assistant", "STL mesh export"]},
+        {"id": "quantum", "name": "Quantum", "price": PLAN_PRICES["quantum"], "limit": PLAN_LIMITS["quantum"], "features": ["2000 generations / day", "Fastest GPU lane", "All future models", "Beta features early", "Pro support", "Team sharing"]},
+        {"id": "singularity", "name": "Singularity", "price": PLAN_PRICES["singularity"], "limit": PLAN_LIMITS["singularity"], "features": ["Unlimited generations", "Dedicated GPU pod", "White-glove support", "Early model access", "Commercial + reseller license", "API access (beta)"]},
     ]
 
 

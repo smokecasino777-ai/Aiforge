@@ -30,7 +30,13 @@ export default function CreationCard({ creation, size = 'md', style }: Props) {
 
   const isImage = creation.type === 'image' || creation.type === 'model3d';
   const hasMedia = !!creation.media_data;
-  const uri = hasMedia && isImage ? `data:${creation.media_mime};base64,${creation.media_data}` : null;
+  const isScad = creation.media_mime === 'application/x-openscad';
+  // For SCAD entries we show the preview_image (PNG) instead of the base64 code
+  const uri = isScad && creation.preview_image
+    ? `data:image/png;base64,${creation.preview_image}`
+    : hasMedia && isImage
+      ? `data:${creation.media_mime};base64,${creation.media_data}`
+      : null;
 
   return (
     <PressableScale

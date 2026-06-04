@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Dimensions,
+  PanResponder,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,10 +20,11 @@ import {
   Download,
   Trash2,
   Clock,
-  Share2,
   Copy,
   Sparkles,
   Scissors,
+  Code2,
+  Box,
 } from 'lucide-react-native';
 import StarryBackground from '@/src/components/StarryBackground';
 import GradientButton from '@/src/components/GradientButton';
@@ -29,12 +32,15 @@ import PressableScale from '@/src/components/PressableScale';
 import { colors, radius, TYPE_META } from '@/src/theme/colors';
 import { api, Creation } from '@/src/api/client';
 
+const { width: SCREEN_W } = Dimensions.get('window');
+
 export default function CreationDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [creation, setCreation] = useState<Creation | null>(null);
   const [loading, setLoading] = useState(true);
-  const [trim, setTrim] = useState({ start: 0, end: 12 });
+  const [trim, setTrim] = useState<{ start: number; end: number }>({ start: 0, end: 12 });
+  const [scadView, setScadView] = useState<'preview' | 'code'>('preview');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
@@ -42,7 +48,7 @@ export default function CreationDetail() {
     try {
       const c = await api.getCreation(id);
       setCreation(c);
-      if (c.duration) setTrim({ start: 0, end: c.duration });
+      if (c.duration) setTrim({ start: 0, end: Math.min(60, c.duration * 5) });
     } catch (e: any) {
       Alert.alert('Error', e.message);
     } finally {
@@ -54,7 +60,6 @@ export default function CreationDetail() {
     load();
   }, [load]);
 
-  // Poll while processing
   useEffect(() => {
     if (creation?.status === 'processing') {
       pollRef.current = setInterval(load, 5000);
@@ -84,46 +89,41 @@ export default function CreationDetail() {
     ]);
   };
 
+  const decodeBase64 = (b64: string) => {
+    if (typeof atob === 'function') return atob(b64);
+    return Buffer.from(b64, 'base64').toString('utf-8');
+  };
+
   const onDownload = async () => {
     if (!creation?.media_data) return;
-    if (Platform.OS === 'web') {
-      try {
-        const link = document.createElement('a');
-        link.href = `data:${creation.media_mime};base64,${creation.media_data}`;
-        const ext =
-          creation.type === 'video'
-            ? 'mp4'
-            : creation.type === 'image' || creation.type === 'model3d'
-              ? 'png'
-              : creation.media_mime === 'application/x-openscad'
-                ? 'scad'
-                : 'txt';
-        link.download = `${creation.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${ext}`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } catch {
-        Alert.alert('Download', 'Open the asset and use your browser to save.');
-      }
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const link = document.createElement('a');
+      link.href = `data:${creation.media_mime};base64,${creation.media_data}`;
+      const ext =
+        creation.type === 'video'
+          ? 'mp4'
+          : creation.media_mime === 'application/x-openscad'
+            ? 'scad'
+            : creation.type === 'chat'
+              ? 'txt'
+              : 'png';
+      link.download = `${creation.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${ext}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } else {
-      Alert.alert('Saved', 'Open the asset via Share to save to your device.');
+      Alert.alert('Saved', 'Open with share to save to your device.');
     }
   };
 
   const onCopy = async () => {
-    if (!creation) return;
-    if (creation.media_mime === 'application/x-openscad' || creation.type === 'chat') {
-      const text = creation.media_data
-        ? typeof atob === 'function'
-          ? atob(creation.media_data)
-          : Buffer.from(creation.media_data, 'base64').toString('utf-8')
-        : '';
-      if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
-        await navigator.clipboard.writeText(text);
-        Alert.alert('Copied', 'Content copied to clipboard.');
-      } else {
-        Alert.alert('Content', text.slice(0, 1200));
-      }
+    if (!creation?.media_data) return;
+    const text = decodeBase64(creation.media_data);
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
+      await navigator.clipboard.writeText(text);
+      Alert.alert('Copied', 'Content copied to clipboard.');
+    } else {
+      Alert.alert('Content', text.slice(0, 1200));
     }
   };
 
@@ -145,19 +145,22 @@ export default function CreationDetail() {
   }
 
   const meta = TYPE_META[creation.type];
-  const isImage = creation.type === 'image' || creation.type === 'model3d';
+  const isImage = creation.type === 'image';
   const isVideo = creation.type === 'video';
-  const isText = creation.type === 'chat' || creation.media_mime === 'application/x-openscad';
-  const dataUri =
-    creation.media_data && (isImage || isVideo)
+  const isScad = creation.media_mime === 'application/x-openscad';
+  const is3DImage = creation.type === 'model3d' && !isScad;
+  const isChat = creation.type === 'chat';
+
+  const mediaUri =
+    creation.media_data && (isImage || is3DImage)
       ? `data:${creation.media_mime};base64,${creation.media_data}`
       : null;
-
-  const textContent = isText && creation.media_data
-    ? (typeof atob === 'function'
-        ? atob(creation.media_data)
-        : Buffer.from(creation.media_data, 'base64').toString('utf-8'))
-    : '';
+  const videoUri =
+    isVideo && creation.media_data ? `data:${creation.media_mime};base64,${creation.media_data}` : null;
+  const scadPreviewUri = isScad && creation.preview_image
+    ? `data:image/png;base64,${creation.preview_image}` : null;
+  const scadCode = isScad && creation.media_data ? decodeBase64(creation.media_data) : '';
+  const chatText = isChat && creation.media_data ? decodeBase64(creation.media_data) : '';
 
   return (
     <View style={styles.root}>
@@ -181,34 +184,28 @@ export default function CreationDetail() {
               <View style={styles.processing}>
                 <ActivityIndicator color={colors.cyan} size="large" />
                 <Text style={styles.processingText}>
-                  {isVideo ? 'Forging your video… (Sora can take a few minutes)' : 'Generating…'}
+                  {isVideo ? 'Forging your video… Sora can take a few minutes.' : 'Generating…'}
                 </Text>
               </View>
             ) : creation.status === 'failed' ? (
               <View style={styles.failed}>
                 <Text style={styles.failedText}>{creation.error || 'Generation failed.'}</Text>
               </View>
-            ) : isImage && dataUri ? (
-              <Image source={{ uri: dataUri }} style={styles.media} resizeMode="cover" />
-            ) : isVideo && dataUri ? (
-              <View style={styles.media}>
-                <WebView
-                  originWhitelist={['*']}
-                  style={{ flex: 1, backgroundColor: '#000' }}
-                  source={{
-                    html: `
-                      <html><body style="margin:0;padding:0;background:#000;">
-                        <video src="${dataUri}" controls autoplay loop style="width:100%;height:100%;object-fit:cover;" playsinline></video>
-                      </body></html>
-                    `,
-                  }}
-                  allowsInlineMediaPlayback
-                  mediaPlaybackRequiresUserAction={false}
-                />
-              </View>
-            ) : isText ? (
-              <ScrollView style={styles.codeWrap} contentContainerStyle={{ padding: 14 }}>
-                <Text style={styles.codeText}>{textContent}</Text>
+            ) : isVideo && videoUri ? (
+              <VideoPlayer src={videoUri} />
+            ) : isScad ? (
+              <ScadViewer
+                view={scadView}
+                onChangeView={setScadView}
+                previewUri={scadPreviewUri}
+                code={scadCode}
+                title={creation.title}
+              />
+            ) : mediaUri ? (
+              <Image source={{ uri: mediaUri }} style={styles.media} resizeMode="cover" />
+            ) : isChat ? (
+              <ScrollView style={styles.codeWrap} contentContainerStyle={{ padding: 16 }}>
+                <Text style={styles.chatText}>{chatText}</Text>
               </ScrollView>
             ) : null}
           </View>
@@ -231,44 +228,7 @@ export default function CreationDetail() {
           </View>
 
           {isVideo && creation.status === 'ready' ? (
-            <View style={styles.editorCard}>
-              <View style={styles.editorHead}>
-                <Scissors size={14} color={colors.cyan} />
-                <Text style={styles.editorTitle}>Trim & Loop</Text>
-                <Text style={styles.editorBadge}>BETA</Text>
-              </View>
-              <Text style={styles.editorSub}>
-                Pick start / end seconds. Long clips loop seamlessly up to 60s in the player above.
-              </Text>
-              <View style={styles.trimRow}>
-                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((s) => (
-                  <PressableScale
-                    key={s}
-                    onPress={() => {
-                      if (s < trim.end) setTrim({ ...trim, start: s });
-                    }}
-                    testID={`trim-start-${s}`}
-                  >
-                    <View
-                      style={[
-                        styles.trimDot,
-                        s >= trim.start && s <= trim.end && {
-                          backgroundColor: colors.cyan,
-                          borderColor: colors.cyan,
-                        },
-                      ]}
-                    >
-                      <Text style={[styles.trimDotText, s >= trim.start && s <= trim.end && { color: '#000' }]}>
-                        {s}
-                      </Text>
-                    </View>
-                  </PressableScale>
-                ))}
-              </View>
-              <Text style={styles.helper}>
-                Range: {trim.start}s → {trim.end}s · Final length: {trim.end - trim.start}s
-              </Text>
-            </View>
+            <TrimEditor trim={trim} setTrim={setTrim} />
           ) : null}
 
           <View style={styles.actionsRow}>
@@ -278,8 +238,9 @@ export default function CreationDetail() {
               icon={<Download size={16} color="#000" />}
               testID="download-btn"
               style={{ flex: 1 }}
+              small
             />
-            {isText ? (
+            {(isScad || isChat) ? (
               <GradientButton
                 title="Copy"
                 onPress={onCopy}
@@ -287,6 +248,7 @@ export default function CreationDetail() {
                 icon={<Copy size={16} color={colors.text} />}
                 testID="copy-btn"
                 style={{ flex: 1 }}
+                small
               />
             ) : null}
             <GradientButton
@@ -296,6 +258,7 @@ export default function CreationDetail() {
               icon={<Trash2 size={16} color={colors.red} />}
               testID="delete-btn"
               style={{ flex: 1 }}
+              small
             />
           </View>
 
@@ -306,13 +269,164 @@ export default function CreationDetail() {
             />
             <Sparkles size={14} color={colors.cyan} />
             <Text style={styles.tipText}>
-              Tip: Use the Assistant in Create to refine your prompts and forge better results.
+              {isScad
+                ? 'Paste the .scad code into OpenSCAD to render a real STL mesh.'
+                : isVideo
+                  ? 'Use Trim to pick start/end seconds; the player loops to fill up to 60s.'
+                  : 'Tip: Refine your prompts in Create → AI Assist for sharper results.'}
             </Text>
           </View>
 
-          <View style={{ height: 60 }} />
+          <View style={{ height: 80 }} />
         </ScrollView>
       </SafeAreaView>
+    </View>
+  );
+}
+
+function VideoPlayer({ src }: { src: string }) {
+  return (
+    <View style={styles.media}>
+      <WebView
+        originWhitelist={['*']}
+        style={{ flex: 1, backgroundColor: '#000' }}
+        source={{
+          html: `
+            <html><body style="margin:0;padding:0;background:#000;display:flex;align-items:center;justify-content:center;">
+              <video src="${src}" controls autoplay loop playsinline
+                style="width:100%;height:100%;object-fit:contain;background:#000;"></video>
+            </body></html>
+          `,
+        }}
+        allowsInlineMediaPlayback
+        mediaPlaybackRequiresUserAction={false}
+      />
+    </View>
+  );
+}
+
+function ScadViewer({
+  view,
+  onChangeView,
+  previewUri,
+  code,
+  title,
+}: {
+  view: 'preview' | 'code';
+  onChangeView: (v: 'preview' | 'code') => void;
+  previewUri: string | null;
+  code: string;
+  title: string;
+}) {
+  return (
+    <View style={styles.media}>
+      <View style={styles.scadTabs}>
+        <PressableScale onPress={() => onChangeView('preview')} testID="scad-tab-preview">
+          <View style={[styles.scadTab, view === 'preview' && styles.scadTabActive]}>
+            <Box size={14} color={view === 'preview' ? colors.purple : colors.textDim} />
+            <Text style={[styles.scadTabText, view === 'preview' && { color: colors.purple }]}>
+              Preview
+            </Text>
+          </View>
+        </PressableScale>
+        <PressableScale onPress={() => onChangeView('code')} testID="scad-tab-code">
+          <View style={[styles.scadTab, view === 'code' && styles.scadTabActive]}>
+            <Code2 size={14} color={view === 'code' ? colors.green : colors.textDim} />
+            <Text style={[styles.scadTabText, view === 'code' && { color: colors.green }]}>
+              SCAD
+            </Text>
+          </View>
+        </PressableScale>
+      </View>
+      {view === 'preview' ? (
+        previewUri ? (
+          <Image source={{ uri: previewUri }} style={styles.scadPreview} resizeMode="cover" />
+        ) : (
+          <View style={styles.scadEmpty}>
+            <Box size={42} color={colors.purple} />
+            <Text style={styles.scadEmptyText}>{title}</Text>
+            <Text style={styles.scadEmptySub}>No preview generated.</Text>
+          </View>
+        )
+      ) : (
+        <ScrollView style={{ flex: 1, backgroundColor: '#06060c' }} contentContainerStyle={{ padding: 14 }}>
+          <Text style={styles.codeText}>{code}</Text>
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+function TrimEditor({
+  trim,
+  setTrim,
+}: {
+  trim: { start: number; end: number };
+  setTrim: (t: { start: number; end: number }) => void;
+}) {
+  const MAX = 60;
+  const trackWidth = SCREEN_W - 64;
+  const pxPerSec = trackWidth / MAX;
+  const startX = useRef(trim.start * pxPerSec);
+  const endX = useRef(trim.end * pxPerSec);
+
+  const makeResponder = (which: 'start' | 'end') =>
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderMove: (_, g) => {
+        if (which === 'start') {
+          const x = Math.max(0, Math.min(g.moveX - 32, endX.current - 18));
+          startX.current = x;
+          const seconds = Math.max(0, Math.round(x / pxPerSec));
+          setTrim({ start: seconds, end: trim.end });
+        } else {
+          const x = Math.max(startX.current + 18, Math.min(g.moveX - 32, trackWidth));
+          endX.current = x;
+          const seconds = Math.min(MAX, Math.round(x / pxPerSec));
+          setTrim({ start: trim.start, end: seconds });
+        }
+      },
+    });
+
+  const startResponder = useRef(makeResponder('start')).current;
+  const endResponder = useRef(makeResponder('end')).current;
+
+  const leftPct = (trim.start / MAX) * 100;
+  const widthPct = ((trim.end - trim.start) / MAX) * 100;
+
+  return (
+    <View style={styles.editorCard}>
+      <View style={styles.editorHead}>
+        <Scissors size={14} color={colors.cyan} />
+        <Text style={styles.editorTitle}>Trim & Loop</Text>
+        <Text style={styles.editorBadge}>CAPCUT-STYLE</Text>
+      </View>
+      <Text style={styles.editorSub}>
+        Drag the cyan handles to set range. Final length: {trim.end - trim.start}s (max 60s).
+      </Text>
+      <View style={styles.trimTrack}>
+        <View style={[styles.trimSelected, { left: `${leftPct}%`, width: `${widthPct}%` }]} />
+        <View
+          {...startResponder.panHandlers}
+          style={[styles.trimHandle, { left: `${leftPct}%` }]}
+          testID="trim-handle-start"
+        >
+          <Text style={styles.trimHandleText}>{trim.start}s</Text>
+        </View>
+        <View
+          {...endResponder.panHandlers}
+          style={[styles.trimHandle, { left: `${leftPct + widthPct}%`, marginLeft: -28 }]}
+          testID="trim-handle-end"
+        >
+          <Text style={styles.trimHandleText}>{trim.end}s</Text>
+        </View>
+      </View>
+      <View style={styles.timeline}>
+        {[0, 10, 20, 30, 40, 50, 60].map((s) => (
+          <Text key={s} style={styles.timelineLabel}>{s}s</Text>
+        ))}
+      </View>
     </View>
   );
 }
@@ -341,32 +455,64 @@ const styles = StyleSheet.create({
   failedText: { color: colors.red, fontSize: 13, textAlign: 'center' },
   codeWrap: { flex: 1, backgroundColor: '#06060c' },
   codeText: { color: colors.green, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 12, lineHeight: 18 },
+  chatText: { color: colors.text, fontSize: 14, lineHeight: 21 },
   title: { color: colors.text, fontSize: 24, fontWeight: '900', letterSpacing: -0.4 },
   prompt: { color: colors.textDim, fontSize: 14, lineHeight: 21 },
   metaRow: { flexDirection: 'row', gap: 14 },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   metaText: { color: colors.textDim, fontSize: 11 },
+  // SCAD viewer
+  scadTabs: { flexDirection: 'row', padding: 8, gap: 6, backgroundColor: 'rgba(0,0,0,0.5)' },
+  scadTab: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.04)' },
+  scadTabActive: { borderColor: colors.borderStrong, backgroundColor: 'rgba(255,255,255,0.08)' },
+  scadTabText: { color: colors.textDim, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+  scadPreview: { flex: 1 },
+  scadEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  scadEmptyText: { color: colors.text, fontWeight: '700' },
+  scadEmptySub: { color: colors.textDim, fontSize: 12 },
+  // Trim editor
   editorCard: {
     backgroundColor: colors.bgElev,
     borderColor: colors.cyan + '44',
     borderWidth: 1,
     borderRadius: radius.lg,
     padding: 14,
-    gap: 8,
+    gap: 10,
   },
   editorHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   editorTitle: { color: colors.text, fontSize: 14, fontWeight: '800' },
   editorBadge: { color: colors.cyan, fontSize: 9, fontWeight: '900', letterSpacing: 1, marginLeft: 'auto' },
   editorSub: { color: colors.textDim, fontSize: 11 },
-  trimRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
-  trimDot: {
-    width: 30, height: 30, borderRadius: 8,
-    borderWidth: 1, borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    alignItems: 'center', justifyContent: 'center',
+  trimTrack: {
+    height: 44,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: radius.md,
+    position: 'relative',
+    marginTop: 4,
   },
-  trimDotText: { color: colors.textDim, fontSize: 11, fontWeight: '700' },
-  helper: { color: colors.textMuted, fontSize: 11, marginTop: 4 },
+  trimSelected: {
+    position: 'absolute',
+    top: 0, bottom: 0,
+    backgroundColor: colors.cyan + '35',
+    borderColor: colors.cyan,
+    borderWidth: 1,
+    borderRadius: radius.md,
+  },
+  trimHandle: {
+    position: 'absolute',
+    top: 4, bottom: 4,
+    width: 28,
+    borderRadius: 6,
+    backgroundColor: colors.cyan,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.cyan,
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+  },
+  trimHandleText: { color: '#000', fontSize: 10, fontWeight: '900' },
+  timeline: { flexDirection: 'row', justifyContent: 'space-between' },
+  timelineLabel: { color: colors.textMuted, fontSize: 10 },
   actionsRow: { flexDirection: 'row', gap: 8 },
   tip: {
     flexDirection: 'row', gap: 8, alignItems: 'center',
