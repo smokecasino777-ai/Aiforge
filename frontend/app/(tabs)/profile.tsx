@@ -225,12 +225,12 @@ export default function Profile() {
           </View>
 
           <View style={styles.menu}>
-            <MenuItem icon={<Shield size={16} color={colors.textDim} />} label="Privacy & Data" />
-            <MenuItem
-              icon={<Info size={16} color={colors.textDim} />}
-              label="About AiForge"
-              sub="Multi-AI creation platform"
-            />
+            <PressableScale onPress={() => router.push('/legal/privacy' as any)} testID="menu-privacy">
+              <MenuItem icon={<Shield size={16} color={colors.cyan} />} label="Privacy Policy" sub="What data we collect & your rights" />
+            </PressableScale>
+            <PressableScale onPress={() => router.push('/legal/terms' as any)} testID="menu-terms">
+              <MenuItem icon={<Info size={16} color={colors.green} />} label="Terms of Service" sub="Rules of the road" />
+            </PressableScale>
           </View>
 
           <GradientButton

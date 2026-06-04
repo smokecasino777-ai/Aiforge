@@ -15,10 +15,18 @@
 - Update `EXPO_PUBLIC_BACKEND_URL` in `/app/frontend/.env` accordingly (when you do this, also update the success/cancel URLs Stripe expects)
 - Update the Privacy Policy / Terms of Service links
 
-### 3. Privacy Policy & Terms of Service (REQUIRED by Google Play)
-- Host both at public URLs (e.g. `https://aiforge.app/privacy`, `/terms`)
-- Add the URLs to the Play Console listing AND in the Profile screen's Privacy & Data row (currently a placeholder)
-- The policy must mention: data we collect (email, prompts, generated media), what we do with it, third-party services (Stripe, Emergent LLM, OpenAI/Anthropic/Google AI), and how users can delete their account
+### 3. ✅ Privacy Policy & Terms of Service (DONE — in-app + you'll mirror them on a web page)
+Two full pages now live in the app:
+- **Privacy Policy** — Profile → Privacy Policy. Covers: who we are, what data we collect (account, content, usage, payment, device, referrals), how we use it, third-party processors (Stripe / OpenAI / Google Gemini / Anthropic), storage & security, your rights (view / delete / export), children, changes, contact.
+- **Terms of Service** — Profile → Terms of Service. Covers: acceptance, the service, account rules, acceptable use (with explicit CSAM / deepfake / impersonation prohibitions), your content & licensing, subscriptions & refunds, daily limits, referral program, termination, disclaimers, liability cap, changes, contact.
+
+**For Google Play submission you also need a public URL** (Play does not accept in-app-only links). Two cheap options:
+1. Copy each page's text into a Notion or GitHub Pages site, e.g. `https://aiforge.app/privacy`, `https://aiforge.app/terms`.
+2. Or I can spin up a tiny `/legal/privacy` and `/legal/terms` HTML endpoint on the backend that serves the same text — say the word and I'll wire it.
+
+Then in Profile, replace the Privacy/Terms in-app links with `Linking.openURL(...)` to the public URLs once they exist.
+
+**Support email** — the policies reference `support@aiforge.app`. Create that mailbox (Google Workspace, Zoho, or even a Gmail forward) and you're set.
 
 ### 4. ✅ Account-deletion flow (DONE)
 Profile → bottom of screen → **Delete my account** button.

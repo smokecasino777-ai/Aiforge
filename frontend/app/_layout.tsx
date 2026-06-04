@@ -31,6 +31,8 @@ export default function RootLayout() {
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="creation/[id]" options={{ presentation: 'card', animation: 'slide_from_right' }} />
+            <Stack.Screen name="legal/privacy" options={{ presentation: 'card', animation: 'slide_from_right' }} />
+            <Stack.Screen name="legal/terms" options={{ presentation: 'card', animation: 'slide_from_right' }} />
             <Stack.Screen name="payment/success" options={{ presentation: 'modal' }} />
           </Stack>
         </AuthProvider>
