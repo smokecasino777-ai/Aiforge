@@ -28,11 +28,13 @@ export default function RootLayout() {
           <StatusBar style="light" />
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#020208' } }}>
             <Stack.Screen name="index" />
+            <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="creation/[id]" options={{ presentation: 'card', animation: 'slide_from_right' }} />
             <Stack.Screen name="legal/privacy" options={{ presentation: 'card', animation: 'slide_from_right' }} />
             <Stack.Screen name="legal/terms" options={{ presentation: 'card', animation: 'slide_from_right' }} />
+            <Stack.Screen name="admin/secrets" options={{ presentation: 'card', animation: 'slide_from_right' }} />
             <Stack.Screen name="payment/success" options={{ presentation: 'modal' }} />
           </Stack>
         </AuthProvider>

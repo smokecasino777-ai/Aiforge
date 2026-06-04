@@ -200,9 +200,7 @@ const styles = StyleSheet.create({
   },
   popular: {
     borderColor: colors.cyan + '88',
-    shadowColor: colors.cyan,
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
+    boxShadow: '0px 0px 16px rgba(0,240,255,0.3)',
   },
   popularBar: { position: 'absolute', top: 0, left: 0, right: 0, height: 2 },
   planTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

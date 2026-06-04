@@ -101,7 +101,6 @@ function ShootingStar({ delay }: { delay: number }) {
 
   return (
     <Animated.View
-      pointerEvents="none"
       style={[
         {
           position: 'absolute',
@@ -111,10 +110,8 @@ function ShootingStar({ delay }: { delay: number }) {
           height: 2,
           borderRadius: 2,
           backgroundColor: colors.cyan,
-          shadowColor: colors.cyan,
-          shadowOpacity: 0.9,
-          shadowRadius: 8,
-          shadowOffset: { width: 0, height: 0 },
+          boxShadow: '0px 0px 8px rgba(0,240,255,0.9)',
+          pointerEvents: 'none' as any,
         },
         aStyle,
       ]}
@@ -138,7 +135,7 @@ export default function StarryBackground() {
   }, []);
 
   return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+    <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' as any }]}>
       <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg }]} />
       <LinearGradient
         colors={['rgba(176,38,255,0.12)', 'transparent', 'rgba(0,240,255,0.08)']}

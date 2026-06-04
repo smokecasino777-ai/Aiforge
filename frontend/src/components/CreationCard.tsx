@@ -125,8 +125,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cyan,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.cyan,
-    shadowOpacity: 0.9,
-    shadowRadius: 14,
+    boxShadow: '0px 0px 14px rgba(0,240,255,0.9)',
   },
 });

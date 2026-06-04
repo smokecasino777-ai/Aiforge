@@ -54,8 +54,8 @@ export default function GhostLogoBackground() {
   const size = Math.min(W, H) * 0.88;
 
   return (
-    <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.center, { pointerEvents: 'none' as any }]}>
-      <Animated.View style={[{ width: size, height: size }, aStyle]}>
+    <View style={[StyleSheet.absoluteFill, styles.center, { pointerEvents: 'none' as any }]}>
+      <Animated.View style={[{ width: size, height: size, pointerEvents: 'none' as any }, aStyle]}>
         <Image source={LOGO} style={styles.logo} resizeMode="contain" />
       </Animated.View>
     </View>

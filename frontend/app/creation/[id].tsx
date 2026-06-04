@@ -29,6 +29,7 @@ import {
 import StarryBackground from '@/src/components/StarryBackground';
 import GradientButton from '@/src/components/GradientButton';
 import PressableScale from '@/src/components/PressableScale';
+import Scad3DViewer from '@/src/components/Scad3DViewer';
 import { colors, radius, TYPE_META } from '@/src/theme/colors';
 import { api, Creation } from '@/src/api/client';
 
@@ -198,6 +199,7 @@ export default function CreationDetail() {
                 view={scadView}
                 onChangeView={setScadView}
                 previewUri={scadPreviewUri}
+                previewBase64={creation.preview_image || null}
                 code={scadCode}
                 title={creation.title}
               />
@@ -270,7 +272,7 @@ export default function CreationDetail() {
             <Sparkles size={14} color={colors.cyan} />
             <Text style={styles.tipText}>
               {isScad
-                ? 'Paste the .scad code into OpenSCAD to render a real STL mesh.'
+                ? 'Drag the 3D view to rotate · tap EXPORT STL to download the mesh for printing.'
                 : isVideo
                   ? 'Use Trim to pick start/end seconds; the player loops to fill up to 60s.'
                   : 'Tip: Refine your prompts in Create → AI Assist for sharper results.'}
@@ -309,18 +311,28 @@ function ScadViewer({
   view,
   onChangeView,
   previewUri,
+  previewBase64,
   code,
   title,
 }: {
-  view: 'preview' | 'code';
-  onChangeView: (v: 'preview' | 'code') => void;
+  view: 'preview' | '3d' | 'code';
+  onChangeView: (v: 'preview' | '3d' | 'code') => void;
   previewUri: string | null;
+  previewBase64: string | null;
   code: string;
   title: string;
 }) {
   return (
     <View style={styles.media}>
       <View style={styles.scadTabs}>
+        <PressableScale onPress={() => onChangeView('3d')} testID="scad-tab-3d">
+          <View style={[styles.scadTab, view === '3d' && styles.scadTabActive]}>
+            <Box size={14} color={view === '3d' ? colors.cyan : colors.textDim} />
+            <Text style={[styles.scadTabText, view === '3d' && { color: colors.cyan }]}>
+              3D
+            </Text>
+          </View>
+        </PressableScale>
         <PressableScale onPress={() => onChangeView('preview')} testID="scad-tab-preview">
           <View style={[styles.scadTab, view === 'preview' && styles.scadTabActive]}>
             <Box size={14} color={view === 'preview' ? colors.purple : colors.textDim} />
@@ -338,7 +350,9 @@ function ScadViewer({
           </View>
         </PressableScale>
       </View>
-      {view === 'preview' ? (
+      {view === '3d' ? (
+        <Scad3DViewer scadCode={code} previewBase64={previewBase64} />
+      ) : view === 'preview' ? (
         previewUri ? (
           <Image source={{ uri: previewUri }} style={styles.scadPreview} resizeMode="cover" />
         ) : (
@@ -506,9 +520,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cyan,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.cyan,
-    shadowOpacity: 0.8,
-    shadowRadius: 10,
+    boxShadow: '0px 0px 10px rgba(0,240,255,0.8)',
   },
   trimHandleText: { color: '#000', fontSize: 10, fontWeight: '900' },
   timeline: { flexDirection: 'row', justifyContent: 'space-between' },

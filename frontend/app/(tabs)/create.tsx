@@ -194,9 +194,7 @@ export default function CreateScreen() {
                       styles.typeCard,
                       type === t.id && {
                         borderColor: t.color,
-                        shadowColor: t.color,
-                        shadowOpacity: 0.55,
-                        shadowRadius: 18,
+                        boxShadow: `0px 0px 18px ${t.color}8C`,
                       },
                     ]}
                   >
@@ -574,6 +572,6 @@ const styles = StyleSheet.create({
   sendBtn: {
     width: 44, height: 44, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: colors.yellow, shadowOpacity: 0.7, shadowRadius: 10,
+    boxShadow: '0px 0px 10px rgba(255,214,10,0.7)',
   },
 });

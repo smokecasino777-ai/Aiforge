@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, ViewStyle } from 'react-native';
+import { View, Text, StyleSheet, ViewStyle, Platform } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -44,10 +44,37 @@ export default function PulsingLogo({
     );
   }, [glow, scale, pulse]);
 
+  // Animate scale + an absolute glow view's opacity (boxShadow can't be animated
+  // directly via Reanimated, so we layer a glowing halo View underneath).
   const aStyle = useAnimatedStyle(() => ({
-    shadowOpacity: glow.value,
     transform: [{ scale: scale.value }],
   }));
+  const haloStyle = useAnimatedStyle(() => ({
+    opacity: glow.value,
+  }));
+
+  const halo = (
+    <Animated.View
+      style={[
+        StyleSheet.absoluteFillObject,
+        {
+          borderRadius: size / 3,
+          backgroundColor: colors.cyan,
+          pointerEvents: 'none' as any,
+          // big soft glow (boxShadow is now the cross-platform API in RN 0.76+)
+          ...(Platform.OS === 'web'
+            ? { boxShadow: '0px 0px 22px rgba(0,240,255,0.85)' }
+            : {
+                shadowColor: colors.cyan,
+                shadowRadius: 22,
+                shadowOpacity: 0.85,
+                shadowOffset: { width: 0, height: 0 },
+              }),
+        },
+        haloStyle,
+      ]}
+    />
+  );
 
   return (
     <View style={[styles.row, style]} testID={testID}>
@@ -57,13 +84,11 @@ export default function PulsingLogo({
             width: size,
             height: size,
             borderRadius: size / 3,
-            shadowColor: colors.cyan,
-            shadowRadius: 22,
-            shadowOffset: { width: 0, height: 0 },
           },
           aStyle,
         ]}
       >
+        {halo}
         <LinearGradient
           colors={[colors.cyan, colors.green, colors.purple]}
           start={{ x: 0, y: 0 }}

@@ -166,6 +166,37 @@ export const api = {
       plan: string;
     }>(`/checkout/status/${sessionId}`);
   },
+  // ---- Admin (owner-only) ----
+  async adminMe() {
+    return request<{ is_admin: boolean; email: string }>('/admin/me');
+  },
+  async adminGetStripeKey() {
+    return request<{
+      mode: string;
+      fingerprint: string;
+      updated_at: string;
+      is_sandbox: boolean;
+      is_live: boolean;
+    }>('/admin/stripe-key');
+  },
+  async adminSetStripeKey(key: string) {
+    return request<{
+      ok: boolean;
+      mode: string;
+      fingerprint: string;
+      updated_at: string;
+      message: string;
+    }>('/admin/stripe-key', {
+      method: 'POST',
+      body: JSON.stringify({ key }),
+    });
+  },
+  async adminResetStripeKey() {
+    return request<{ ok: boolean; mode: string; fingerprint: string; updated_at: string }>(
+      '/admin/stripe-key',
+      { method: 'DELETE' },
+    );
+  },
 };
 
 export const BACKEND_URL = BASE;

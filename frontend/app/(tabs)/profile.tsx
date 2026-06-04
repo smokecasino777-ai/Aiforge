@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Alert, Platform, Share } from 'reac
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { LogOut, Mail, Crown, BarChart2, Shield, Info, Gift, Share2, Copy, Trash2 } from 'lucide-react-native';
+import { LogOut, Mail, Crown, BarChart2, Shield, Info, Gift, Share2, Copy, Trash2, KeyRound } from 'lucide-react-native';
 import StarryBackground from '@/src/components/StarryBackground';
 import GhostLogoBackground from '@/src/components/GhostLogoBackground';
 import GradientButton from '@/src/components/GradientButton';
@@ -22,11 +22,16 @@ export default function Profile() {
     bonus_until: string | null;
     share_text: string;
   } | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const loadRef = useCallback(async () => {
     try {
       const r = await api.referralsMe();
       setReferral(r);
+    } catch {}
+    try {
+      const a = await api.adminMe();
+      setIsAdmin(a.is_admin);
     } catch {}
   }, []);
 
@@ -231,6 +236,15 @@ export default function Profile() {
             <PressableScale onPress={() => router.push('/legal/terms' as any)} testID="menu-terms">
               <MenuItem icon={<Info size={16} color={colors.green} />} label="Terms of Service" sub="Rules of the road" />
             </PressableScale>
+            {isAdmin ? (
+              <PressableScale onPress={() => router.push('/admin/secrets' as any)} testID="menu-admin-secrets">
+                <MenuItem
+                  icon={<KeyRound size={16} color={colors.yellow} />}
+                  label="Owner · App Secrets"
+                  sub="Manage your Stripe API key securely"
+                />
+              </PressableScale>
+            ) : null}
           </View>
 
           <GradientButton

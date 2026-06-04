@@ -91,10 +91,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     borderRadius: radius.pill,
     gap: 10,
-    shadowColor: colors.green,
-    shadowOpacity: 0.55,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 6 },
+    boxShadow: '0px 6px 18px rgba(0,255,102,0.55)',
   },
   small: { paddingVertical: 12, paddingHorizontal: 18 },
   primaryText: {

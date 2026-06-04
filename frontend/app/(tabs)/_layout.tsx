@@ -25,9 +25,7 @@ export default function TabsLayout() {
           backgroundColor: 'transparent',
           borderRadius: 24,
           elevation: 0,
-          shadowColor: colors.cyan,
-          shadowOpacity: 0.25,
-          shadowRadius: 18,
+          boxShadow: '0px 0px 18px rgba(0,240,255,0.25)',
         },
         tabBarBackground: () => (
           <View style={StyleSheet.absoluteFill}>
@@ -110,14 +108,11 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.green,
-    shadowOpacity: 0.7,
-    shadowRadius: 16,
+    boxShadow: '0px 0px 16px rgba(0,255,102,0.7)',
     borderWidth: 2,
     borderColor: '#020208',
   },
   createGradActive: {
-    shadowOpacity: 1,
-    shadowRadius: 22,
+    boxShadow: '0px 0px 22px rgba(0,255,102,1)',
   },
 });

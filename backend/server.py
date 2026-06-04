@@ -36,6 +36,32 @@ JWT_SECRET = os.environ.get("JWT_SECRET", "aiforge-secret-change-me")
 JWT_ALG = "HS256"
 JWT_EXP_DAYS = 7
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "sk_test_emergent")
+ADMIN_EMAIL = (os.environ.get("ADMIN_EMAIL") or "").lower().strip()
+
+# Runtime container so /api/admin endpoints can hot-swap the live Stripe key
+# without restarting the backend.
+RUNTIME = {
+    "stripe_api_key": STRIPE_API_KEY,
+    "stripe_updated_at": os.environ.get("STRIPE_KEY_UPDATED_AT") or "",
+    "stripe_fingerprint": os.environ.get("STRIPE_KEY_FINGERPRINT") or "",
+}
+
+
+def current_stripe_key() -> str:
+    return RUNTIME["stripe_api_key"] or "sk_test_emergent"
+
+
+def stripe_mode_of(key: str) -> str:
+    if not key:
+        return "unknown"
+    if key.startswith("sk_live_"):
+        return "live"
+    if key.startswith("sk_test_") and key != "sk_test_emergent":
+        return "test"
+    if key == "sk_test_emergent":
+        return "sandbox"
+    return "unknown"
+
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
@@ -688,7 +714,7 @@ async def create_checkout(req: CheckoutRequest, user: dict = Depends(get_current
     success_url = f"{origin}/payment/success?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{origin}/payment/cancel"
     webhook_url = f"{origin}/api/webhook/stripe"
-    sc = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
+    sc = StripeCheckout(api_key=current_stripe_key(), webhook_url=webhook_url)
     sess_req = CheckoutSessionRequest(
         amount=amount,
         currency="usd",
@@ -735,7 +761,7 @@ async def checkout_status(session_id: str, user: dict = Depends(get_current_user
         }
 
     # Try Stripe lookup
-    sc = StripeCheckout(api_key=STRIPE_API_KEY)
+    sc = StripeCheckout(api_key=current_stripe_key())
     stripe_status = None
     stripe_payment_status = None
     try:
@@ -761,7 +787,7 @@ async def checkout_status(session_id: str, user: dict = Depends(get_current_user
     if (
         not paid
         and stripe_payment_status is None
-        and STRIPE_API_KEY == "sk_test_emergent"
+        and current_stripe_key() == "sk_test_emergent"
     ):
         try:
             created = datetime.fromisoformat(pay["created_at"])
@@ -805,7 +831,7 @@ async def checkout_status(session_id: str, user: dict = Depends(get_current_user
 @api.post("/webhook/stripe")
 async def stripe_webhook(request: Request, stripe_signature: Optional[str] = Header(None)):
     body = await request.body()
-    sc = StripeCheckout(api_key=STRIPE_API_KEY)
+    sc = StripeCheckout(api_key=current_stripe_key())
     try:
         event = await sc.handle_webhook(body, stripe_signature or "")
     except Exception as e:
@@ -822,6 +848,167 @@ async def stripe_webhook(request: Request, stripe_signature: Optional[str] = Hea
                 {"$set": {"payment_status": "paid", "status": "complete", "paid_at": iso(now_utc())}},
             )
     return {"received": True}
+
+
+# ----- Admin (Owner-only Secrets management) -----
+def is_admin(user: dict) -> bool:
+    """Admin = configured ADMIN_EMAIL, or the first registered user (fallback)."""
+    if ADMIN_EMAIL and (user.get("email") or "").lower() == ADMIN_EMAIL:
+        return True
+    return bool(user.get("is_admin"))
+
+
+async def ensure_admin(user: dict) -> dict:
+    if is_admin(user):
+        return user
+    # Fallback: if no admin exists yet, the very first user becomes admin.
+    count_admins = await db.users.count_documents({"is_admin": True})
+    if count_admins == 0:
+        # Promote the oldest user by created_at to admin once.
+        first = await db.users.find_one({}, sort=[("created_at", 1)])
+        if first and first.get("user_id") == user.get("user_id"):
+            await db.users.update_one(
+                {"user_id": user["user_id"]}, {"$set": {"is_admin": True}}
+            )
+            user["is_admin"] = True
+            return user
+    raise HTTPException(status_code=403, detail="Admin access required")
+
+
+class StripeKeyRequest(BaseModel):
+    key: str  # e.g. "sk_live_..." or "sk_test_..."
+
+
+def _key_fingerprint(key: str) -> str:
+    """Safe, non-reversible fingerprint of a key for UI display."""
+    if not key:
+        return ""
+    head = key[:8]
+    tail = key[-4:]
+    return f"{head}…{tail}"
+
+
+def _persist_env_var(name: str, value: str) -> None:
+    """Update or append a KEY=VALUE pair in the backend .env (atomic)."""
+    env_path = ROOT_DIR / ".env"
+    if not env_path.exists():
+        env_path.write_text(f"{name}={value}\n")
+        return
+    lines = env_path.read_text().splitlines()
+    found = False
+    new_lines: List[str] = []
+    for line in lines:
+        if line.strip().startswith(f"{name}=") or line.strip().startswith(f"{name} ="):
+            new_lines.append(f"{name}={value}")
+            found = True
+        else:
+            new_lines.append(line)
+    if not found:
+        new_lines.append(f"{name}={value}")
+    tmp_path = env_path.with_suffix(".env.tmp")
+    tmp_path.write_text("\n".join(new_lines) + "\n")
+    tmp_path.replace(env_path)
+
+
+async def _validate_stripe_key(key: str) -> tuple[bool, str]:
+    """Hit a cheap Stripe endpoint with the key to confirm it's valid."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as h:
+            r = await h.get(
+                "https://api.stripe.com/v1/balance",
+                auth=(key, ""),
+            )
+        if r.status_code == 200:
+            return True, "Key validated against Stripe."
+        try:
+            err = r.json().get("error", {}).get("message") or f"HTTP {r.status_code}"
+        except Exception:
+            err = f"HTTP {r.status_code}"
+        return False, err
+    except Exception as e:
+        return False, str(e)[:200]
+
+
+@api.get("/admin/stripe-key")
+async def admin_stripe_key_get(user: dict = Depends(get_current_user)):
+    await ensure_admin(user)
+    key = current_stripe_key()
+    return {
+        "mode": stripe_mode_of(key),
+        "fingerprint": RUNTIME.get("stripe_fingerprint") or _key_fingerprint(key),
+        "updated_at": RUNTIME.get("stripe_updated_at") or "",
+        "is_sandbox": key == "sk_test_emergent",
+        "is_live": key.startswith("sk_live_"),
+    }
+
+
+@api.post("/admin/stripe-key")
+async def admin_stripe_key_set(
+    req: StripeKeyRequest, user: dict = Depends(get_current_user)
+):
+    await ensure_admin(user)
+    key = (req.key or "").strip()
+    if not key:
+        raise HTTPException(status_code=400, detail="Empty key")
+    if not (key.startswith("sk_live_") or key.startswith("sk_test_")):
+        raise HTTPException(
+            status_code=400,
+            detail="Key must start with sk_live_ or sk_test_",
+        )
+    # The Emergent sandbox key is a special placeholder; allow it without
+    # hitting Stripe (it isn't real and won't validate).
+    if key == "sk_test_emergent":
+        ok, msg = True, "Sandbox key configured (test mode)."
+    else:
+        ok, msg = await _validate_stripe_key(key)
+    if not ok:
+        raise HTTPException(status_code=400, detail=f"Stripe rejected this key: {msg}")
+    # Persist & hot-swap
+    fp = _key_fingerprint(key)
+    now = iso(now_utc())
+    _persist_env_var("STRIPE_API_KEY", key)
+    _persist_env_var("STRIPE_KEY_FINGERPRINT", fp)
+    _persist_env_var("STRIPE_KEY_UPDATED_AT", now)
+    RUNTIME["stripe_api_key"] = key
+    RUNTIME["stripe_fingerprint"] = fp
+    RUNTIME["stripe_updated_at"] = now
+    logger.info(
+        f"Stripe key rotated by {user.get('email')} → mode={stripe_mode_of(key)}, fp={fp}"
+    )
+    return {
+        "ok": True,
+        "mode": stripe_mode_of(key),
+        "fingerprint": fp,
+        "updated_at": now,
+        "message": msg,
+    }
+
+
+@api.delete("/admin/stripe-key")
+async def admin_stripe_key_revoke(user: dict = Depends(get_current_user)):
+    """Roll back to the sandbox test key."""
+    await ensure_admin(user)
+    key = "sk_test_emergent"
+    fp = _key_fingerprint(key)
+    now = iso(now_utc())
+    _persist_env_var("STRIPE_API_KEY", key)
+    _persist_env_var("STRIPE_KEY_FINGERPRINT", fp)
+    _persist_env_var("STRIPE_KEY_UPDATED_AT", now)
+    RUNTIME["stripe_api_key"] = key
+    RUNTIME["stripe_fingerprint"] = fp
+    RUNTIME["stripe_updated_at"] = now
+    logger.info(f"Stripe key reset to sandbox by {user.get('email')}")
+    return {"ok": True, "mode": "sandbox", "fingerprint": fp, "updated_at": now}
+
+
+@api.get("/admin/me")
+async def admin_me(user: dict = Depends(get_current_user)):
+    """Lightweight check the frontend uses to decide whether to show admin UI."""
+    try:
+        await ensure_admin(user)
+        return {"is_admin": True, "email": user.get("email")}
+    except HTTPException:
+        return {"is_admin": False, "email": user.get("email")}
 
 
 # ----- Startup -----
