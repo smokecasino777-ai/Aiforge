@@ -15,18 +15,17 @@
 - Update `EXPO_PUBLIC_BACKEND_URL` in `/app/frontend/.env` accordingly (when you do this, also update the success/cancel URLs Stripe expects)
 - Update the Privacy Policy / Terms of Service links
 
-### 3. ✅ Privacy Policy & Terms of Service (DONE — in-app + you'll mirror them on a web page)
-Two full pages now live in the app:
-- **Privacy Policy** — Profile → Privacy Policy. Covers: who we are, what data we collect (account, content, usage, payment, device, referrals), how we use it, third-party processors (Stripe / OpenAI / Google Gemini / Anthropic), storage & security, your rights (view / delete / export), children, changes, contact.
-- **Terms of Service** — Profile → Terms of Service. Covers: acceptance, the service, account rules, acceptable use (with explicit CSAM / deepfake / impersonation prohibitions), your content & licensing, subscriptions & refunds, daily limits, referral program, termination, disclaimers, liability cap, changes, contact.
+### 3. ✅ Privacy Policy & Terms of Service — PUBLIC URLs LIVE
+Both pages are now hosted **directly on your backend** with the AiForge dark theme — no DNS / hosting setup needed. Paste these into the Play Console **App content → Privacy policy** field:
 
-**For Google Play submission you also need a public URL** (Play does not accept in-app-only links). Two cheap options:
-1. Copy each page's text into a Notion or GitHub Pages site, e.g. `https://aiforge.app/privacy`, `https://aiforge.app/terms`.
-2. Or I can spin up a tiny `/legal/privacy` and `/legal/terms` HTML endpoint on the backend that serves the same text — say the word and I'll wire it.
+- **Privacy Policy**: `https://fierce-forge-ios.preview.emergentagent.com/api/legal/privacy`
+- **Terms of Service**: `https://fierce-forge-ios.preview.emergentagent.com/api/legal/terms`
 
-Then in Profile, replace the Privacy/Terms in-app links with `Linking.openURL(...)` to the public URLs once they exist.
+Both pages cover everything Google Play requires (data collected, third-party processors Stripe / OpenAI / Google / Anthropic, user rights, account deletion, children, acceptable use, refund policy, liability cap).
 
-**Support email** — the policies reference `support@aiforge.app`. Create that mailbox (Google Workspace, Zoho, or even a Gmail forward) and you're set.
+The in-app versions (Profile → Privacy Policy / Terms of Service) are still there for offline reading. When you switch to a custom domain (e.g. `aiforge.app`), the URLs automatically become `https://aiforge.app/api/legal/privacy`.
+
+**Support email** — the policies reference `support@aiforge.app`. Create that mailbox (Google Workspace, Zoho, or a Gmail forward) — that's the only thing you have to do yourself for this section.
 
 ### 4. ✅ Account-deletion flow (DONE)
 Profile → bottom of screen → **Delete my account** button.

@@ -22,6 +22,8 @@ from emergentintegrations.payments.stripe.checkout import (
     StripeCheckout,
     CheckoutSessionRequest,
 )
+from fastapi.responses import HTMLResponse
+from legal_pages import PRIVACY_HTML, TERMS_HTML
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env", override=True)
@@ -205,6 +207,17 @@ def make_referral_code(user_id: str) -> str:
 @api.get("/")
 async def root():
     return {"name": "AiForge API", "status": "ok"}
+
+
+# ----- Legal pages (publicly reachable HTML) -----
+@api.get("/legal/privacy", response_class=HTMLResponse)
+async def legal_privacy():
+    return HTMLResponse(content=PRIVACY_HTML, status_code=200)
+
+
+@api.get("/legal/terms", response_class=HTMLResponse)
+async def legal_terms():
+    return HTMLResponse(content=TERMS_HTML, status_code=200)
 
 
 # ----- Auth -----
