@@ -5,7 +5,7 @@ import uuid
 import requests
 import pytest
 
-BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://fierce-forge-ios.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", os.environ.get("EXPO_BACKEND_URL", "https://fierce-forge-ios.preview.emergentagent.com")).rstrip("/")
 API = f"{BASE_URL}/api"
 
 # Module-level shared state
@@ -194,13 +194,18 @@ class TestGeneration:
         assert len(c["preview_image"]) > 500, "preview_image looks too small to be a real PNG"
         STATE["scad_id"] = c["id"]
 
-    def test_chat_multiturn_session_continuity(self, session, fresh_user):
-        """Two-message conversation: second must reference first via shared session_id."""
+    def test_chat_multiturn_session_continuity(self, session):
+        """Two-message conversation: second must reference first via shared session_id.
+        Uses a brand-new user to avoid quota collisions with prior tests."""
+        email = f"TEST_mt_{uuid.uuid4().hex[:8]}@example.com"
+        reg = session.post(f"{API}/auth/register", json={"email": email, "password": "Pass1234!"})
+        assert reg.status_code == 200
+        tok = reg.json()["token"]
         sid = f"test-session-{uuid.uuid4().hex[:10]}"
         r1 = session.post(
             f"{API}/chat",
-            headers=auth_h(fresh_user["token"]),
-            json={"prompt": "Remember this secret code: BANANA-42. Acknowledge briefly.", "session_id": sid},
+            headers=auth_h(tok),
+            json={"prompt": "Remember code FALCON-99. Acknowledge briefly.", "session_id": sid},
             timeout=60,
         )
         assert r1.status_code == 200, r1.text[:300]
@@ -210,20 +215,25 @@ class TestGeneration:
         # Second turn references first
         r2 = session.post(
             f"{API}/chat",
-            headers=auth_h(fresh_user["token"]),
-            json={"prompt": "What was the secret code I just told you? Answer with just the code.", "session_id": sid},
+            headers=auth_h(tok),
+            json={"prompt": "What was the code I told you? Answer with just the code.", "session_id": sid},
             timeout=60,
         )
         assert r2.status_code == 200, r2.text[:300]
         d2 = r2.json()
         assert d2.get("session_id") == sid
         reply2 = d2.get("reply", "")
-        assert "BANANA-42" in reply2.upper() or "BANANA" in reply2.upper(), f"multi-turn lost context, reply: {reply2[:200]}"
+        assert "FALCON" in reply2.upper(), f"multi-turn lost context, reply: {reply2[:200]}"
 
-    def test_video_generation_processing(self, session, fresh_user):
+    def test_video_generation_processing(self, session):
+        """Use a fresh user so daily limit doesn't interfere."""
+        email = f"TEST_vid_{uuid.uuid4().hex[:8]}@example.com"
+        reg = session.post(f"{API}/auth/register", json={"email": email, "password": "Pass1234!"})
+        assert reg.status_code == 200
+        tok = reg.json()["token"]
         r = session.post(
             f"{API}/generate",
-            headers=auth_h(fresh_user["token"]),
+            headers=auth_h(tok),
             json={"type": "video", "prompt": "a cat walking", "duration": 4, "size": "1280x720"},
             timeout=30,
         )
@@ -320,6 +330,30 @@ class TestCheckout:
             timeout=30,
         )
         assert r.status_code == 200, f"checkout failed: {r.text[:300]}"
+        data = r.json()
+        assert data.get("url", "").startswith("http")
+        assert data.get("session_id")
+
+    def test_checkout_quantum(self, session, demo_token):
+        r = session.post(
+            f"{API}/checkout/create",
+            headers=auth_h(demo_token),
+            json={"plan": "quantum", "origin_url": BASE_URL},
+            timeout=30,
+        )
+        assert r.status_code == 200, f"quantum checkout failed: {r.status_code} {r.text[:300]}"
+        data = r.json()
+        assert data.get("url", "").startswith("http")
+        assert data.get("session_id")
+
+    def test_checkout_singularity(self, session, demo_token):
+        r = session.post(
+            f"{API}/checkout/create",
+            headers=auth_h(demo_token),
+            json={"plan": "singularity", "origin_url": BASE_URL},
+            timeout=30,
+        )
+        assert r.status_code == 200, f"singularity checkout failed: {r.status_code} {r.text[:300]}"
         data = r.json()
         assert data.get("url", "").startswith("http")
         assert data.get("session_id")

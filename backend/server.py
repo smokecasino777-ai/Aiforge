@@ -100,7 +100,7 @@ class CreationOut(BaseModel):
     duration: Optional[int] = None
 
 class CheckoutRequest(BaseModel):
-    plan: Literal["spark", "forge", "neon"]
+    plan: Literal["spark", "forge", "neon", "quantum", "singularity"]
     origin_url: str
 
 class CheckoutResponse(BaseModel):
@@ -399,17 +399,79 @@ async def generate(req: GenerateRequest, background: BackgroundTasks, user: dict
 
 @api.post("/chat", response_model=dict)
 async def chat_endpoint(req: ChatRequest, user: dict = Depends(get_current_user)):
-    session = req.session_id or f"chat-{user['user_id']}"
+    """Multi-turn chat with persistent history in MongoDB keyed by (user_id, session_id)."""
+    plan = user.get("plan", "free")
+    limit = PLAN_LIMITS.get(plan, 5)
+    used = await daily_used(user["user_id"])
+    if used >= limit:
+        raise HTTPException(status_code=402, detail=f"Daily limit reached ({limit}). Upgrade your plan.")
+
+    session_id = req.session_id or f"chat-{uuid.uuid4().hex[:12]}"
+
+    # Load existing transcript (up to last 30 turns) for this user+session
+    transcript_doc = await db.chat_sessions.find_one(
+        {"user_id": user["user_id"], "session_id": session_id},
+        {"_id": 0, "messages": 1},
+    )
+    history: List[dict] = (transcript_doc or {}).get("messages", []) or []
+    # Trim to last 30 messages to bound prompt size
+    history = history[-30:]
+
+    # Build context for the LLM call: prefix prior messages, then add the new user msg
     try:
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
-            session_id=session,
-            system_message="You are AiForge Assistant, an energetic creative AI partner. Help users craft amazing prompts and answer their questions about AI generation. Be concise and helpful.",
+            session_id=session_id,
+            system_message=(
+                "You are AiForge Assistant, an energetic creative AI co-pilot. "
+                "You help users craft amazing prompts, brainstorm ideas, and answer questions about "
+                "image, video and 3D AI generation. Be concise, vivid and helpful. "
+                "Stay in character and remember context from earlier in the conversation."
+            ),
         ).with_model("anthropic", "claude-sonnet-4-6")
-        reply = await chat.send_message(UserMessage(text=req.prompt))
+
+        # Replay prior history through the LlmChat so the LLM sees full context.
+        # Each prior turn is sent silently; only the final response is returned to the user.
+        prior_pairs: List[tuple[str, str]] = []
+        i = 0
+        while i < len(history) - 1:
+            if history[i]["role"] == "user" and history[i + 1]["role"] == "assistant":
+                prior_pairs.append((history[i]["text"], history[i + 1]["text"]))
+                i += 2
+            else:
+                i += 1
+
+        if prior_pairs:
+            # Use the first user message to set the conversation kickoff context
+            primer = "[Conversation so far — for context only, do not re-greet]:\n\n"
+            for u, a in prior_pairs:
+                primer += f"User: {u}\nAssistant: {a}\n\n"
+            primer += f"User: {req.prompt}\n\nReply to the latest user message above, keeping prior context."
+            reply = await chat.send_message(UserMessage(text=primer))
+        else:
+            reply = await chat.send_message(UserMessage(text=req.prompt))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Chat failed: {str(e)[:200]}")
-    return {"reply": reply, "session_id": session}
+
+    # Persist updated transcript
+    new_messages = history + [
+        {"role": "user", "text": req.prompt, "ts": iso(now_utc())},
+        {"role": "assistant", "text": reply, "ts": iso(now_utc())},
+    ]
+    await db.chat_sessions.update_one(
+        {"user_id": user["user_id"], "session_id": session_id},
+        {
+            "$set": {
+                "user_id": user["user_id"],
+                "session_id": session_id,
+                "messages": new_messages,
+                "updated_at": iso(now_utc()),
+            }
+        },
+        upsert=True,
+    )
+    await increment_usage(user["user_id"])
+    return {"reply": reply, "session_id": session_id}
 
 
 class ScadRequest(BaseModel):
