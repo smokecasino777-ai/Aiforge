@@ -5,7 +5,7 @@ type AuthCtx = {
   user: User | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, name?: string) => Promise<void>;
+  signUp: (email: string, password: string, name?: string, referralCode?: string) => Promise<void>;
   signInWithGoogleSession: (sessionId: string) => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -58,8 +58,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(r.user);
   }, []);
 
-  const signUp = useCallback(async (email: string, password: string, name?: string) => {
-    const r = await api.register(email, password, name);
+  const signUp = useCallback(async (email: string, password: string, name?: string, referralCode?: string) => {
+    const r = await api.register(email, password, name, referralCode);
     await api.setToken(r.token);
     setUser(r.user);
   }, []);

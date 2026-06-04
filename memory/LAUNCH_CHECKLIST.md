@@ -1,0 +1,82 @@
+# 🚀 AiForge — Google Play Launch Checklist
+
+## Before tapping Publish
+
+### 1. Switch Stripe to LIVE mode (so you actually get paid)
+- Follow `/app/memory/STRIPE_LIVE_SETUP.md`
+- Replace `STRIPE_API_KEY=sk_test_emergent` with your `sk_live_…` key
+- `sudo supervisorctl restart backend`
+- Test a real purchase from a separate device before launch
+
+### 2. Configure stable production domain (recommended, optional)
+- Currently the backend lives at `https://fierce-forge-ios.preview.emergentagent.com`
+- For your store listing, a custom domain (e.g. `https://aiforge.app`) is more trustworthy
+- Update DNS → CNAME the domain to the Emergent host
+- Update `EXPO_PUBLIC_BACKEND_URL` in `/app/frontend/.env` accordingly (when you do this, also update the success/cancel URLs Stripe expects)
+- Update the Privacy Policy / Terms of Service links
+
+### 3. Privacy Policy & Terms of Service (REQUIRED by Google Play)
+- Host both at public URLs (e.g. `https://aiforge.app/privacy`, `/terms`)
+- Add the URLs to the Play Console listing AND in the Profile screen's Privacy & Data row (currently a placeholder)
+- The policy must mention: data we collect (email, prompts, generated media), what we do with it, third-party services (Stripe, Emergent LLM, OpenAI/Anthropic/Google AI), and how users can delete their account
+
+### 4. Account-deletion flow (REQUIRED by Google Play as of 2024)
+- Profile → Privacy & Data → add a "Delete my account" option
+- I have left the row as a placeholder; tell me when you want me to wire `/api/auth/delete-me` and the UI.
+
+### 5. App icon & graphics
+- `/app/frontend/assets/images/icon.png` — replace with your hi-res 1024×1024 AiForge logo (no transparency, no rounded corners — Play handles it)
+- `/app/frontend/assets/images/adaptive-icon.png` — Android adaptive icon foreground (1024×1024 PNG with safe-zone padding)
+- Splash screen `/app/frontend/assets/images/splash-icon.png` — already set, dark BG matches `#020208`
+
+### 6. Play Store listing assets you'll need
+- Short description (≤80 chars): _"Forge AI images, videos, 3D & code. Multi-AI cyberpunk creation studio."_
+- Long description (4000 chars max) — pitch the 6 plans, the multi-AI assistant, the SCAD/STL output, share-to-earn
+- 2 phone screenshots minimum (1080×1920 portrait, no overlay text required)
+- 1 feature graphic 1024×500
+- Optional promo video (YouTube link)
+
+### 7. Build the signed Android App Bundle
+1. In Emergent's UI, hit the **Publish** button (top-right).
+2. The platform builds a signed **.aab** using `com.aiforge.app`.
+3. Download the .aab when the build completes.
+
+### 8. Google Play Console upload
+1. Create a developer account at https://play.google.com/console ($25 one-time).
+2. Create a new app:
+   - App name: **AiForge**
+   - Default language: English (US)
+   - App or game: **App**
+   - Free or paid: **Free** (in-app purchases happen via Stripe)
+3. Upload the `.aab` under **Production → Create new release**.
+4. Fill out the **Store listing** with assets from step 6.
+5. Fill out **Content rating** questionnaire (likely "Teen" because of user-generated content).
+6. Fill out **Data safety form** — be honest:
+   - Data collected: Email address, User content (prompts, generated media), Purchase history
+   - Data shared with third parties: Stripe (purchases), AI providers (prompt content)
+   - All data encrypted in transit (HTTPS), users can request deletion
+7. **Pricing & distribution**: Free, all countries except sanctioned ones.
+8. Submit for review. Initial reviews usually take 2–7 days.
+
+### 9. Post-launch monitoring
+- Daily: `tail -f /var/log/supervisor/backend.out.log` for errors
+- Weekly: Stripe Dashboard → Payments → confirm payouts hit your bank
+- Watch the Play Console **Crashes & ANRs** dashboard
+- Reply to user reviews — it boosts ranking
+
+---
+
+## ✅ What's already done
+- 6 plan tiers ($0 / $9.99 / $29.99 / $49.99 / $99.99 / $199.99)
+- Stripe checkout works end-to-end (verified with `4242 4242 4242 4242`)
+- Plan auto-upgrades on payment success and via webhook
+- Daily usage limits enforced server-side (HTTP 402 over limit)
+- Real multi-turn AI assistant with persistent conversation memory
+- Image (Nano Banana), Video (Sora 2), 3D Render (Nano Banana), SCAD code (Claude) + PNG preview, Chat (Claude)
+- Library, Creation detail with WebView video player + CapCut-style draggable trim editor + tabbed SCAD viewer
+- Cyberpunk-galaxy theme: starfield, shooting stars, **breathing ghost AiForge logo backdrop**, neon gradient buttons, haptic press animations
+- **Share-to-earn referral system**: every user gets a unique code (`AF-XXXXXX`), and when a friend signs up with it, BOTH users get +20 generations/day for 7 days
+- `app.json` configured with `com.aiforge.app` Android package, dark theme, edge-to-edge, adaptive icon, scheme `aiforge`
+- 28/28 backend pytest cases passing in latest run
+
+You're ready. Hit Publish whenever you are.

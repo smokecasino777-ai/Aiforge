@@ -17,7 +17,7 @@ import PulsingLogo from '@/src/components/Logo';
 import GradientButton from '@/src/components/GradientButton';
 import PressableScale from '@/src/components/PressableScale';
 import { colors, radius } from '@/src/theme/colors';
-import { Mail, Lock, User } from 'lucide-react-native';
+import { Mail, Lock, User, Gift } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function Register() {
@@ -26,6 +26,7 @@ export default function Register() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [referral, setReferral] = useState('');
   const [loading, setLoading] = useState(false);
 
   const onRegister = async () => {
@@ -39,7 +40,7 @@ export default function Register() {
     }
     setLoading(true);
     try {
-      await signUp(email.trim(), password, name.trim() || undefined);
+      await signUp(email.trim(), password, name.trim() || undefined, referral.trim() || undefined);
       router.replace('/(tabs)');
     } catch (e: any) {
       Alert.alert('Sign-up failed', e.message);
@@ -99,6 +100,19 @@ export default function Register() {
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry
+                  style={styles.input}
+                />
+              </View>
+
+              <View style={styles.field}>
+                <Gift size={18} color={colors.green} />
+                <TextInput
+                  testID="reg-referral"
+                  placeholder="Referral code (optional, +20/day for a week)"
+                  placeholderTextColor={colors.textMuted}
+                  value={referral}
+                  onChangeText={(t) => setReferral(t.toUpperCase())}
+                  autoCapitalize="characters"
                   style={styles.input}
                 />
               </View>

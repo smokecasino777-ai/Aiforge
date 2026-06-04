@@ -12,6 +12,9 @@ export type User = {
   plan: string;
   daily_used: number;
   daily_limit: number;
+  referral_code?: string | null;
+  bonus_until?: string | null;
+  bonus_amount?: number;
 };
 
 export type Creation = {
@@ -63,10 +66,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  async register(email: string, password: string, name?: string) {
+  async register(email: string, password: string, name?: string, referralCode?: string) {
     return request<{ token: string; user: User }>('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, password, name }),
+      body: JSON.stringify({ email, password, name, referral_code: referralCode || undefined }),
     });
   },
   async login(email: string, password: string) {
@@ -131,6 +134,15 @@ export const api = {
     return request<{ image: number; video: number; model3d: number; chat: number }>(
       '/creations/stats',
     );
+  },
+  async referralsMe() {
+    return request<{
+      code: string;
+      referred_count: number;
+      bonus_amount: number;
+      bonus_until: string | null;
+      share_text: string;
+    }>('/referrals/me');
   },
   async plans() {
     return request<Plan[]>('/plans');

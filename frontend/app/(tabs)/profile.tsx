@@ -1,19 +1,40 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Alert, Platform, Share } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { LogOut, Mail, Crown, BarChart2, Shield, Info } from 'lucide-react-native';
+import { LogOut, Mail, Crown, BarChart2, Shield, Info, Gift, Share2, Copy } from 'lucide-react-native';
 import StarryBackground from '@/src/components/StarryBackground';
 import GhostLogoBackground from '@/src/components/GhostLogoBackground';
 import GradientButton from '@/src/components/GradientButton';
 import PressableScale from '@/src/components/PressableScale';
 import { colors, radius, PLAN_META } from '@/src/theme/colors';
 import { useAuth } from '@/src/context/AuthContext';
+import { api } from '@/src/api/client';
 
 export default function Profile() {
   const { user, signOut } = useAuth();
   const router = useRouter();
+  const [referral, setReferral] = useState<{
+    code: string;
+    referred_count: number;
+    bonus_amount: number;
+    bonus_until: string | null;
+    share_text: string;
+  } | null>(null);
+
+  const loadRef = useCallback(async () => {
+    try {
+      const r = await api.referralsMe();
+      setReferral(r);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    loadRef();
+  }, [loadRef]);
+
+  useFocusEffect(useCallback(() => { loadRef(); }, [loadRef]));
 
   const onLogout = () => {
     Alert.alert('Sign out', 'Sure you want to log out?', [
@@ -27,6 +48,32 @@ export default function Profile() {
         },
       },
     ]);
+  };
+
+  const onShare = async () => {
+    if (!referral) return;
+    try {
+      if (Platform.OS === 'web' && typeof navigator !== 'undefined') {
+        if ((navigator as any).share) {
+          await (navigator as any).share({ title: 'AiForge', text: referral.share_text });
+        } else if (navigator.clipboard) {
+          await navigator.clipboard.writeText(referral.share_text);
+          Alert.alert('Copied!', 'Referral link copied to clipboard.');
+        }
+      } else {
+        await Share.share({ message: referral.share_text });
+      }
+    } catch {}
+  };
+
+  const onCopyCode = async () => {
+    if (!referral) return;
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard) {
+      await navigator.clipboard.writeText(referral.code);
+      Alert.alert('Copied!', `Referral code ${referral.code} copied.`);
+    } else {
+      await Share.share({ message: referral.code });
+    }
   };
 
   const meta = PLAN_META[user?.plan || 'free'] ?? PLAN_META.free;
@@ -97,6 +144,62 @@ export default function Profile() {
               </View>
             </View>
           </PressableScale>
+
+          {/* Referral card */}
+          <View style={styles.referralCard}>
+            <LinearGradient
+              colors={[colors.green + '18', 'transparent']}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.refHeader}>
+              <Gift size={18} color={colors.green} />
+              <Text style={styles.refTitle}>Invite friends · Earn bonus</Text>
+            </View>
+            <Text style={styles.refSub}>
+              Share your code. When a friend signs up with it, you BOTH get
+              <Text style={{ color: colors.green, fontWeight: '900' }}> +20 generations / day </Text>
+              for 7 days.
+            </Text>
+
+            <PressableScale onPress={onCopyCode} testID="ref-copy-code">
+              <View style={styles.codePill}>
+                <Text style={styles.codeText}>{referral?.code ?? 'Loading…'}</Text>
+                <Copy size={14} color={colors.cyan} />
+              </View>
+            </PressableScale>
+
+            <View style={styles.refStatsRow}>
+              <View style={styles.refStat}>
+                <Text style={styles.refStatValue}>{referral?.referred_count ?? 0}</Text>
+                <Text style={styles.refStatLabel}>Friends joined</Text>
+              </View>
+              <View style={styles.refStat}>
+                <Text style={styles.refStatValue}>
+                  {referral?.bonus_amount ? `+${referral.bonus_amount}` : '—'}
+                </Text>
+                <Text style={styles.refStatLabel}>Bonus / day</Text>
+              </View>
+              <View style={styles.refStat}>
+                <Text style={styles.refStatValue}>
+                  {referral?.bonus_until
+                    ? Math.max(0, Math.ceil(
+                        (new Date(referral.bonus_until).getTime() - Date.now()) / 86400000,
+                      )) + 'd'
+                    : '—'}
+                </Text>
+                <Text style={styles.refStatLabel}>Bonus left</Text>
+              </View>
+            </View>
+
+            <GradientButton
+              title="Share My Code"
+              onPress={onShare}
+              icon={<Share2 size={16} color="#000" />}
+              testID="ref-share"
+              small
+              style={{ marginTop: 12 }}
+            />
+          </View>
 
           <View style={styles.menu}>
             <MenuItem icon={<Shield size={16} color={colors.textDim} />} label="Privacy & Data" />
@@ -179,6 +282,37 @@ const styles = StyleSheet.create({
   },
   upgradeTitle: { color: colors.text, fontSize: 15, fontWeight: '800' },
   upgradeSub: { color: colors.textDim, fontSize: 12, marginTop: 2 },
+  // referral
+  referralCard: {
+    backgroundColor: colors.bgElev,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.green + '55',
+    padding: 16,
+    gap: 10,
+    overflow: 'hidden',
+  },
+  refHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  refTitle: { color: colors.text, fontSize: 15, fontWeight: '800' },
+  refSub: { color: colors.textDim, fontSize: 12, lineHeight: 18 },
+  codePill: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 14, paddingVertical: 12,
+    borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.cyan + '55',
+    backgroundColor: 'rgba(0,240,255,0.06)',
+    marginTop: 4,
+  },
+  codeText: { color: colors.cyan, fontWeight: '900', letterSpacing: 2, fontSize: 16 },
+  refStatsRow: { flexDirection: 'row', gap: 10, marginTop: 6 },
+  refStat: {
+    flex: 1, padding: 10, borderRadius: radius.md,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1, borderColor: colors.border,
+    alignItems: 'center',
+  },
+  refStatValue: { color: colors.text, fontSize: 18, fontWeight: '900' },
+  refStatLabel: { color: colors.textDim, fontSize: 10, marginTop: 2, fontWeight: '700' },
   menu: { gap: 4, marginTop: 6 },
   menuItem: {
     flexDirection: 'row', alignItems: 'center', gap: 12,

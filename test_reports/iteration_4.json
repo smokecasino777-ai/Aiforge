@@ -1,0 +1,37 @@
+{
+  "summary": "Backend regression + new referral system: 34/34 PASS (0 failures, 84s). All iteration-3 endpoints still green AND all new referral-system additions verified: AF-XXXXXX code format, +20/day bonus for 7 days granted to BOTH new user and referrer, daily_limit=25 for new user, /api/referrals/me returns code/referred_count/bonus_amount/bonus_until/share_text, invalid referral codes silently ignored (registration not blocked). UserOut now exposes referral_code, bonus_until, bonus_amount. CheckoutRequest accepts quantum & singularity (both Stripe URLs generated OK). Stripe /checkout/status fallback verified — upgrades a fresh free user to forge after sandbox Stripe lookup 404s (trust-the-redirect logic working for sessions <2h old). Multi-turn chat retains context across two POST /api/chat calls with same session_id (FALCON-99 echo test).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_aiforge_backend.py",
+    "/app/backend/tests/test_referrals_and_checkout_status.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "make_referral_code uses last 6 hex chars of user_id (uuid4 hex[:12]) — collision risk is low but non-zero across millions of users. Consider unique index on users.referral_code + retry-on-duplicate for production scale.",
+    "referrals_me silently backfills missing referral_code on read; that's fine, but the register endpoint already sets it, so the backfill path only protects pre-existing Google-auth users. Acceptable.",
+    "Checkout/status fallback (lines 717-735) trusts ANY recent (<2h) authed session_id even when Stripe lookup raises. In Emergent sandbox this is intentional, but on production with real Stripe keys this could allow upgrade without payment if Stripe lookup transiently fails. Suggest gating fallback behind STRIPE_API_KEY == 'sk_test_emergent' OR an explicit feature flag before Google Play launch.",
+    "Self-referral isn't reachable via API (you can't know your code before registering) but server-side check exists (referrer['user_id'] != user_id) — good defensive code."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_referrals_and_checkout_status.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (34/34)",
+    "frontend": "not tested (skipped per request)"
+  },
+  "seed_data_creation": "Created ~10 TEST_*@example.com users during the run; cleanup fixture purges them post-run from users + payments collections.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All 34 backend tests green. For next iteration just run `pytest /app/backend/tests/ -v --tb=short --junitxml=/app/test_reports/pytest/pytest_results.xml`. Demo user demo@example.com / demo1234 has plan=free; chat-based daily-limit tests reuse 5 chat gens per fresh user, so don't burn demo quota. The Stripe fallback test will SKIP (not fail) if the env returns a non-paid Stripe status — it currently passes via the fallback path in this sandbox.",
+  "rca_of_issue": "N/A — no failures. Pre-launch regression is clean."
+}
