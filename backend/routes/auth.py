@@ -1,0 +1,135 @@
+"""Auth routes: register, login, google session, me, delete-me."""
+import uuid
+from datetime import timedelta
+
+import bcrypt
+import httpx
+from fastapi import APIRouter, Depends, HTTPException
+
+from core import (
+    db,
+    ensure_admin,  # noqa: F401  (kept for parity)
+    get_current_user,
+    iso,
+    logger,
+    make_referral_code,
+    make_token,
+    now_utc,
+    user_to_out,
+)
+from models import (
+    AuthResponse,
+    GoogleSessionRequest,
+    LoginRequest,
+    RegisterRequest,
+    UserOut,
+)
+
+router = APIRouter(tags=["auth"])
+
+
+@router.post("/auth/register", response_model=AuthResponse)
+async def register(req: RegisterRequest):
+    existing = await db.users.find_one({"email": req.email.lower()})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    hashed = bcrypt.hashpw(req.password.encode(), bcrypt.gensalt()).decode()
+    doc = {
+        "user_id": user_id,
+        "email": req.email.lower(),
+        "name": req.name or req.email.split("@")[0],
+        "picture": None,
+        "password_hash": hashed,
+        "plan": "free",
+        "created_at": iso(now_utc()),
+        "auth_provider": "email",
+        "referral_code": make_referral_code(user_id),
+    }
+
+    # Referral bonus
+    if req.referral_code:
+        referrer = await db.users.find_one(
+            {"referral_code": req.referral_code.strip().upper()},
+            {"_id": 0, "user_id": 1},
+        )
+        if referrer and referrer["user_id"] != user_id:
+            doc["referred_by"] = referrer["user_id"]
+            expires = iso(now_utc() + timedelta(days=7))
+            doc["bonus_amount"] = 20
+            doc["bonus_until"] = expires
+            await db.users.update_one(
+                {"user_id": referrer["user_id"]},
+                {"$set": {"bonus_amount": 20, "bonus_until": expires}},
+            )
+
+    await db.users.insert_one(doc)
+    token = make_token(user_id)
+    return AuthResponse(token=token, user=await user_to_out(doc))
+
+
+@router.post("/auth/login", response_model=AuthResponse)
+async def login(req: LoginRequest):
+    user = await db.users.find_one({"email": req.email.lower()}, {"_id": 0})
+    if not user or not user.get("password_hash"):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not bcrypt.checkpw(req.password.encode(), user["password_hash"].encode()):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = make_token(user["user_id"])
+    return AuthResponse(token=token, user=await user_to_out(user))
+
+
+@router.post("/auth/google", response_model=AuthResponse)
+async def google_auth(req: GoogleSessionRequest):
+    """Exchange Emergent session_id for our JWT."""
+    async with httpx.AsyncClient(timeout=20.0) as h:
+        resp = await h.get(
+            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+            headers={"X-Session-ID": req.session_id},
+        )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=401, detail="Invalid Google session")
+    data = resp.json()
+    email = (data.get("email") or "").lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="No email from Google")
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    if not user:
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        user = {
+            "user_id": user_id,
+            "email": email,
+            "name": data.get("name"),
+            "picture": data.get("picture"),
+            "password_hash": None,
+            "plan": "free",
+            "created_at": iso(now_utc()),
+            "auth_provider": "google",
+        }
+        await db.users.insert_one(user)
+    token = make_token(user["user_id"])
+    return AuthResponse(token=token, user=await user_to_out(user))
+
+
+@router.get("/auth/me", response_model=UserOut)
+async def me(user: dict = Depends(get_current_user)):
+    return await user_to_out(user)
+
+
+@router.delete("/auth/me")
+async def delete_me(user: dict = Depends(get_current_user)):
+    """Permanently delete the authenticated user and all their data.
+
+    Required by Google Play Store Account Deletion policy (2024).
+    """
+    uid = user["user_id"]
+    await db.creations.delete_many({"user_id": uid})
+    await db.chat_sessions.delete_many({"user_id": uid})
+    await db.usage.delete_many({"user_id": uid})
+    await db.payments.delete_many({"user_id": uid})
+    await db.users.update_many({"referred_by": uid}, {"$unset": {"referred_by": ""}})
+    await db.users.delete_one({"user_id": uid})
+    logger.info(
+        f"User {uid} ({user.get('email')}) permanently deleted via /auth/me DELETE"
+    )
+    return {"deleted": True}
