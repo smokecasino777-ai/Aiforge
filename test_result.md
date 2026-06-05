@@ -261,3 +261,87 @@ agent_communication:
           - Onboarding redirect for fresh users.
           - Admin Secrets page render + form validation.
           - 3D SCAD viewer renders a mesh and STL export downloads a file.
+
+frontend:
+  - task: "AI-powered Editor (matching IMG_6867 mockup)"
+    implemented: true
+    working: true
+    file: "/app/frontend/app/editor.tsx, src/api/client.ts, src/components/CreationCard.tsx, app/(tabs)/index.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: |
+            Built /editor route matching the design exactly: ⚡ EDITOR header, tool
+            grid (Move/Crop/Cut/Rotate L/R/Flip H/V/Add Text/Reset), Upload File
+            + Import from Library entry, canvas with applied transforms, AI tools
+            row (Enhance · Style · BG Remove · Caption). Entry points: home tab
+            "OPEN THE EDITOR" tile + Edit chip on every Library CreationCard.
+            Verified visually with cr_f7af600612544f loaded.
+
+backend:
+  - task: "AI Editor endpoints (Nano Banana image edit + Claude captions + save)"
+    implemented: true
+    working: true
+    file: "/app/backend/routes/editor.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: |
+            POST /api/editor/enhance|style|bg-remove (Nano Banana image-in image-out),
+            POST /api/editor/caption (Claude Sonnet JSON), POST /api/editor/save.
+            Smoke-verified with curl: empty image → 400, invalid style → 400 with
+            allowed-list, caption returns clean JSON, save returns creation_id,
+            85MB synthetic payload → 413. Quota-guarded except /save.
+
+  - task: "Backend refactor: server.py 1040 → 53 lines + routes/* + core.py + models.py"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py, core.py, models.py, routes/*"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: |
+            Split into core (config/db/JWT/admin helpers), models (Pydantic),
+            and routes/{auth,referrals,generation,checkout,admin,legal,assets,editor}.
+            server.py is now a slim entrypoint. Backend hot-reloaded cleanly,
+            existing curl flows still 200.
+
+  - task: "Google Play Store asset endpoints (/api/assets/playstore/*)"
+    implemented: true
+    working: true
+    file: "/app/backend/routes/assets.py, /app/playstore_assets/"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: |
+            Generated 512x512 icon, 1024x500 feature graphic, 1024x1024 hi-res icon,
+            adaptive foreground and 432x432 themed icon from existing source PNGs.
+            Exposed via /api/assets/playstore (HTML index with thumbnails + download)
+            and /api/assets/playstore/<file>?inline=1 for in-browser preview.
+
+agent_communication:
+    -agent: "main"
+    -message: |
+        v2.2 iteration complete. Shipped: (1) AI image/video editor matching the
+        IMG_6867 design with Nano Banana enhance/style/bg-remove, Claude captions,
+        local transforms (rotate, flip, crop, trim, text overlay), and save-as-new.
+        (2) Edit shortcuts in CreationCard + home tile. (3) Google Play asset
+        gallery + download endpoints. (4) Slimmed server.py via core/models/routes
+        split. (5) Reverted revoked live Stripe key to sandbox. The Admin Secrets
+        page is the user's path to rotate a fresh live Stripe key without ever
+        pasting it in chat.
+
+        BLOCKING ON USER: a *fresh, un-leaked* sk_live_... key. Both prior keys
+        the user pasted in chat were auto-revoked by Stripe (HTTP 401 confirmed).

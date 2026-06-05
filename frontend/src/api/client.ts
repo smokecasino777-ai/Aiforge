@@ -197,6 +197,49 @@ export const api = {
       { method: 'DELETE' },
     );
   },
+  // ---- Editor (AI image / video edit) ----
+  async editorEnhance(image_b64: string) {
+    return request<{ image_b64: string; media_mime: string; op: string }>(
+      '/editor/enhance',
+      { method: 'POST', body: JSON.stringify({ image_b64 }) },
+    );
+  },
+  async editorStyle(image_b64: string, style: string) {
+    return request<{ image_b64: string; media_mime: string; op: string }>(
+      '/editor/style',
+      { method: 'POST', body: JSON.stringify({ image_b64, style }) },
+    );
+  },
+  async editorBgRemove(image_b64: string) {
+    return request<{ image_b64: string; media_mime: string; op: string }>(
+      '/editor/bg-remove',
+      { method: 'POST', body: JSON.stringify({ image_b64 }) },
+    );
+  },
+  async editorCaption(prompt: string, opts?: { title?: string; media_type?: string }) {
+    return request<{ hook: string; caption: string; hashtags: string[] }>(
+      '/editor/caption',
+      {
+        method: 'POST',
+        body: JSON.stringify({ prompt, ...(opts || {}) }),
+      },
+    );
+  },
+  async editorSave(payload: {
+    media_b64: string;
+    media_mime: string;
+    type: 'image' | 'video' | 'model3d';
+    title: string;
+    prompt: string;
+    width?: number;
+    height?: number;
+    duration?: number;
+  }) {
+    return request<{ creation_id: string; ok: boolean }>('/editor/save', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
 };
 
 export const BACKEND_URL = BASE;

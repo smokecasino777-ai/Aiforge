@@ -10,7 +10,7 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ImageIcon, Video, Box, MessageSquare, ArrowRight, Sparkles } from 'lucide-react-native';
+import { ImageIcon, Video, Box, MessageSquare, ArrowRight, Sparkles, Zap } from 'lucide-react-native';
 import StarryBackground from '@/src/components/StarryBackground';
 import GhostLogoBackground from '@/src/components/GhostLogoBackground';
 import PulsingLogo from '@/src/components/Logo';
@@ -149,6 +149,29 @@ export default function Home() {
             />
           </View>
 
+          {/* Editor entry tile */}
+          <PressableScale onPress={() => router.push('/editor' as any)} testID="home-editor-tile">
+            <LinearGradient
+              colors={[colors.green + '22', colors.cyan + '14', 'transparent']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.editorTile}
+            >
+              <View style={styles.editorTileLeft}>
+                <View style={styles.editorTileBadge}>
+                  <Zap size={18} color={colors.green} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.editorTileTitle}>OPEN THE EDITOR</Text>
+                  <Text style={styles.editorTileSub}>
+                    Crop · trim · style transfer · BG remove · AI captions
+                  </Text>
+                </View>
+              </View>
+              <ArrowRight size={18} color={colors.green} />
+            </LinearGradient>
+          </PressableScale>
+
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent Creations</Text>
             <PressableScale onPress={() => router.push('/(tabs)/library')} style={styles.viewAll}>
@@ -261,6 +284,29 @@ const styles = StyleSheet.create({
   },
   barFill: { height: 6, borderRadius: 3 },
   categoryRow: { flexDirection: 'row', gap: 10 },
+  editorTile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.green + '55',
+    overflow: 'hidden',
+  },
+  editorTileLeft: { flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1 },
+  editorTileBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: colors.green + '22',
+    borderColor: colors.green + '88',
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editorTileTitle: { color: colors.text, fontWeight: '900', fontSize: 14, letterSpacing: 1 },
+  editorTileSub: { color: colors.textDim, fontSize: 11, marginTop: 2 },
   catCard: {
     borderRadius: radius.lg,
     backgroundColor: colors.bgElev,

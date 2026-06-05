@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, ViewStyle } from 'react-native';
+import { View, Text, StyleSheet, Image, ViewStyle, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ImageIcon, Video, Box, MessageSquare, Play } from 'lucide-react-native';
+import { ImageIcon, Video, Box, MessageSquare, Play, Wand2 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Creation } from '@/src/api/client';
 import { colors, radius, TYPE_META } from '@/src/theme/colors';
@@ -76,6 +76,21 @@ export default function CreationCard({ creation, size = 'md', style }: Props) {
             <Text style={[styles.tagText, { color: meta.color }]}>{meta.label}</Text>
           </View>
         </View>
+        {/* Edit shortcut — only for image / video creations that have media */}
+        {(creation.type === 'image' || creation.type === 'video') && hasMedia ? (
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation?.();
+              router.push(`/editor?source=${creation.id}` as any);
+            }}
+            style={styles.editBtn}
+            testID={`edit-${creation.id}`}
+            hitSlop={6}
+          >
+            <Wand2 size={12} color={colors.green} />
+            <Text style={styles.editText}>EDIT</Text>
+          </Pressable>
+        ) : null}
         <View style={styles.footer}>
           <Text style={styles.title} numberOfLines={1}>
             {creation.title || 'Untitled'}
@@ -127,4 +142,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     boxShadow: '0px 0px 14px rgba(0,240,255,0.9)',
   },
+  editBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(2,2,8,0.85)',
+    borderWidth: 1,
+    borderColor: colors.green + '88',
+  },
+  editText: { color: colors.green, fontWeight: '900', fontSize: 10, letterSpacing: 0.6 },
 });
