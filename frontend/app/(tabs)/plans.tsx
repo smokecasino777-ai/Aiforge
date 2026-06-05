@@ -49,10 +49,15 @@ export default function Plans() {
     if (planId === 'free' || planId === user?.plan) return;
     setBusy(planId);
     try {
-      const origin =
-        Platform.OS === 'web' && typeof window !== 'undefined'
+      // On web, use the live origin so Stripe redirects back to whatever host
+      // the user is on (works for preview, production, custom domains, …).
+      // On native, fall back to the publicly-reachable backend URL which is
+      // also the host serving the web app on Emergent.
+      const liveOrigin =
+        typeof window !== 'undefined' && window.location?.origin
           ? window.location.origin
-          : BACKEND_URL;
+          : '';
+      const origin = (liveOrigin || BACKEND_URL || '').replace(/\/+$/, '');
       const res = await api.createCheckout(planId, origin);
       if (Platform.OS === 'web') {
         if (typeof window !== 'undefined') window.location.href = res.url;

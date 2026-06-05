@@ -19,7 +19,11 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorClient
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / ".env", override=True)
+# IMPORTANT: do NOT pass override=True here. In production (Kubernetes), real
+# env vars (MONGO_URL, DB_NAME, EMERGENT_LLM_KEY, JWT_SECRET, …) are injected
+# at runtime and MUST win over anything in the local .env file. We only fill in
+# values that aren't already set.
+load_dotenv(ROOT_DIR / ".env", override=False)
 
 # ----- Configuration -----
 MONGO_URL = os.environ["MONGO_URL"]
