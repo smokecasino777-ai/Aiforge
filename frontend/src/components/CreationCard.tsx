@@ -76,7 +76,7 @@ export default function CreationCard({ creation, size = 'md', style }: Props) {
             <Text style={[styles.tagText, { color: meta.color }]}>{meta.label}</Text>
           </View>
         </View>
-        {/* Edit shortcut — only for image / video creations that have media */}
+        {/* Edit / Open shortcut */}
         {(creation.type === 'image' || creation.type === 'video') && hasMedia ? (
           <Pressable
             onPress={(e) => {
@@ -89,6 +89,19 @@ export default function CreationCard({ creation, size = 'md', style }: Props) {
           >
             <Wand2 size={12} color={colors.green} />
             <Text style={styles.editText}>EDIT</Text>
+          </Pressable>
+        ) : creation.type === 'model3d' && hasMedia ? (
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation?.();
+              router.push(`/cad?source=${creation.id}` as any);
+            }}
+            style={[styles.editBtn, { borderColor: colors.cyan + '88' }]}
+            testID={`open-cad-${creation.id}`}
+            hitSlop={6}
+          >
+            <Box size={12} color={colors.cyan} />
+            <Text style={[styles.editText, { color: colors.cyan }]}>3D</Text>
           </Pressable>
         ) : null}
         <View style={styles.footer}>

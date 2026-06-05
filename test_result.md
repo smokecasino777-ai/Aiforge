@@ -345,3 +345,55 @@ agent_communication:
 
         BLOCKING ON USER: a *fresh, un-leaked* sk_live_... key. Both prior keys
         the user pasted in chat were auto-revoked by Stripe (HTTP 401 confirmed).
+
+frontend:
+  - task: "CAD Generator full-screen page (matching IMG_6865)"
+    implemented: true
+    working: true
+    file: "/app/frontend/app/cad.tsx, src/components/Scad3DViewer.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: |
+            New /cad route matches the design exactly: cyan "3D / CAD GENERATOR"
+            title, toolbar (UNDO · HIST · ZOOM+ · ZOOM- · STL · trash), big cyan
+            viewport with wireframe-cube empty state, bottom CAD VIEW tag, idea
+            pill row, prompt input + cyan send button.
+            Scad3DViewer refactored to forwardRef exposing imperative API
+            (zoomIn/zoomOut/resetView/exportSTL) via WebView injectJavaScript.
+            History stack for undo/redo of multiple generations.
+            View SCAD source modal via </> button in header.
+            Library "3D" chip on model3d creation cards routes here.
+            Verified visually in empty + loaded states.
+
+  - task: "Editor invalid-input semantics (400 instead of 422)"
+    implemented: true
+    working: true
+    file: "/app/backend/routes/editor.py"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: |
+            StyleRequest moved from Pydantic Literal[...] to plain str with
+            in-handler validation. Empty image_b64 now returns 400 with a clear
+            message (was 502 from upstream). Invalid style returns 400 with the
+            allowed-list. Verified via curl.
+
+agent_communication:
+    -agent: "main"
+    -message: |
+        v2.3 iteration complete. Shipped: (1) CAD Generator full-screen route
+        matching IMG_6865 with forwardRef-driven Scad3DViewer (zoomIn/zoomOut/
+        resetView/exportSTL imperative API + WebView injectJavaScript), history
+        stack with undo/redo, SCAD source modal, 6 quick prompt ideas. Entry
+        points from Home tile and Library 3D card chip. (2) Editor input
+        validation improved to return 400 with allowed-list (was 422). (3) The
+        Stripe key rotation path (Profile → Owner · App Secrets) remains the
+        documented way to go live; user must roll a fresh key in Stripe
+        Dashboard, NOT paste in chat.

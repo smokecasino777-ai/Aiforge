@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { colors } from '@/src/theme/colors';
@@ -7,26 +7,48 @@ type Props = {
   scadCode: string;
   // Optional fallback preview image (base64 png) to show until OpenSCAD loads.
   previewBase64?: string | null;
+  // Hide the in-WebView toolbar when the parent renders its own.
+  hideToolbar?: boolean;
+};
+
+export type Scad3DViewerHandle = {
+  zoomIn: () => void;
+  zoomOut: () => void;
+  resetView: () => void;
+  exportSTL: () => void;
 };
 
 /**
  * Interactive 3D viewer for OpenSCAD code.
  *
- * Strategy:
- *  - Parse the SCAD source on the client side using a tiny Three.js scene that
- *    extracts common primitives (cube, sphere, cylinder) + transforms (translate,
- *    rotate, scale, color, union, difference) sufficient for the AI-generated
- *    snippets we produce server-side.
- *  - This gives users a real rotatable / zoomable 3D mesh, plus an STL export
- *    button — fully in-browser via THREE.js (no openscad-wasm build needed).
- *
- *  The renderer is a single self-contained HTML page injected into a WebView.
+ * The renderer is a self-contained Three.js scene in a WebView. Parents can
+ * drive it imperatively via the ref: zoomIn / zoomOut / resetView / exportSTL.
  */
-export default function Scad3DViewer({ scadCode, previewBase64 }: Props) {
-  const html = useMemo(() => buildHtml(scadCode, previewBase64), [scadCode, previewBase64]);
+const Scad3DViewer = forwardRef<Scad3DViewerHandle, Props>(function Scad3DViewer(
+  { scadCode, previewBase64, hideToolbar },
+  ref,
+) {
+  const webRef = useRef<WebView>(null);
+  const html = useMemo(
+    () => buildHtml(scadCode, previewBase64, hideToolbar),
+    [scadCode, previewBase64, hideToolbar],
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      zoomIn: () => webRef.current?.injectJavaScript('window.__cad?.zoomIn?.(); true;'),
+      zoomOut: () => webRef.current?.injectJavaScript('window.__cad?.zoomOut?.(); true;'),
+      resetView: () => webRef.current?.injectJavaScript('window.__cad?.resetView?.(); true;'),
+      exportSTL: () => webRef.current?.injectJavaScript('window.__cad?.exportSTL?.(); true;'),
+    }),
+    [],
+  );
+
   return (
     <View style={styles.wrap}>
       <WebView
+        ref={webRef}
         originWhitelist={['*']}
         source={{ html }}
         javaScriptEnabled
@@ -34,20 +56,21 @@ export default function Scad3DViewer({ scadCode, previewBase64 }: Props) {
         allowFileAccess={false}
         scrollEnabled={false}
         nestedScrollEnabled={false}
-        // iOS / Android hardware accel
         androidLayerType={Platform.OS === 'android' ? 'hardware' : undefined}
         mixedContentMode="always"
         style={{ flex: 1, backgroundColor: '#06060c' }}
       />
     </View>
   );
-}
+});
+
+export default Scad3DViewer;
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: '#06060c' },
 });
 
-function buildHtml(scadCode: string, previewBase64?: string | null): string {
+function buildHtml(scadCode: string, previewBase64?: string | null, hideToolbar?: boolean): string {
   // Escape backticks and backslashes for safe injection into the template string
   const safeCode = scadCode.replace(/\\/g, '\\\\').replace(/`/g, '\\`');
   const fallback = previewBase64
@@ -72,10 +95,10 @@ function buildHtml(scadCode: string, previewBase64?: string | null): string {
 <body>
   ${fallback ? `<div id="fallback"><img src="${fallback}" /></div>` : ''}
   <canvas id="c"></canvas>
-  <div id="toolbar">
+  ${hideToolbar ? '' : `<div id="toolbar">
     <button class="btn" id="reset">RESET VIEW</button>
     <button class="btn alt" id="stl">EXPORT STL</button>
-  </div>
+  </div>`}
   <div id="status">Drag to rotate · Pinch / scroll to zoom</div>
   <script type="module">
     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
@@ -425,18 +448,25 @@ function buildHtml(scadCode: string, previewBase64?: string | null): string {
     window.addEventListener('resize', size);
     loop();
 
-    document.getElementById('reset').onclick = () => {
+    function resetView() {
       const box = new THREE.Box3().setFromObject(model);
       if(isFinite(box.min.x)){
-        const size = box.getSize(new THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z) || 50;
+        const sz = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(sz.x, sz.y, sz.z) || 50;
         camera.position.set(maxDim*1.6, maxDim*1.4, maxDim*2.2);
         controls.target.set(0,0,0);
         controls.update();
       }
-    };
+    }
 
-    document.getElementById('stl').onclick = () => {
+    function zoom(factor) {
+      const dir = new THREE.Vector3().subVectors(camera.position, controls.target);
+      dir.multiplyScalar(factor);
+      camera.position.copy(controls.target).add(dir);
+      controls.update();
+    }
+
+    function exportSTL() {
       try {
         const ex = new STLExporter();
         const stl = ex.parse(model, { binary: false });
@@ -451,6 +481,17 @@ function buildHtml(scadCode: string, previewBase64?: string | null): string {
       } catch(e){
         status.textContent = 'STL export failed: '+ (e.message||e);
       }
+    }
+
+    document.getElementById('reset')?.addEventListener('click', resetView);
+    document.getElementById('stl')?.addEventListener('click', exportSTL);
+
+    // Imperative API for the React Native parent (via injectJavaScript)
+    window.__cad = {
+      zoomIn:    () => zoom(0.78),
+      zoomOut:   () => zoom(1.28),
+      resetView: resetView,
+      exportSTL: exportSTL,
     };
   </script>
 </body></html>`;

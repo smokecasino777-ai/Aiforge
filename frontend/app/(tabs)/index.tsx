@@ -172,6 +172,29 @@ export default function Home() {
             </LinearGradient>
           </PressableScale>
 
+          {/* CAD generator tile */}
+          <PressableScale onPress={() => router.push('/cad' as any)} testID="home-cad-tile">
+            <LinearGradient
+              colors={[colors.cyan + '22', colors.purple + '14', 'transparent']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.editorTile, { borderColor: colors.cyan + '55' }]}
+            >
+              <View style={styles.editorTileLeft}>
+                <View style={[styles.editorTileBadge, { backgroundColor: colors.cyan + '22', borderColor: colors.cyan + '88' }]}>
+                  <Box size={18} color={colors.cyan} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.editorTileTitle}>3D / CAD GENERATOR</Text>
+                  <Text style={styles.editorTileSub}>
+                    Forge 3D meshes · rotate · zoom · export STL
+                  </Text>
+                </View>
+              </View>
+              <ArrowRight size={18} color={colors.cyan} />
+            </LinearGradient>
+          </PressableScale>
+
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent Creations</Text>
             <PressableScale onPress={() => router.push('/(tabs)/library')} style={styles.viewAll}>
