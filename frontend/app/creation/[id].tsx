@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { WebView } from 'react-native-webview';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ArrowLeft,
@@ -41,7 +40,7 @@ export default function CreationDetail() {
   const [creation, setCreation] = useState<Creation | null>(null);
   const [loading, setLoading] = useState(true);
   const [trim, setTrim] = useState<{ start: number; end: number }>({ start: 0, end: 12 });
-  const [scadView, setScadView] = useState<'preview' | 'code'>('preview');
+  const [scadView, setScadView] = useState<'preview' | '3d' | 'code'>('3d');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
@@ -287,21 +286,41 @@ export default function CreationDetail() {
 }
 
 function VideoPlayer({ src }: { src: string }) {
+  // Use a real HTML5 <video> element on web (works with data: URIs and remote
+  // URLs alike) and expo-video on native. WebView does NOT work in the web
+  // bundle of react-native-web and was the source of the "not working" bug.
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.media}>
+        {React.createElement('video' as any, {
+          src,
+          controls: true,
+          autoPlay: true,
+          loop: true,
+          playsInline: true,
+          style: { width: '100%', height: '100%', objectFit: 'contain', background: '#000' },
+        })}
+      </View>
+    );
+  }
+  return <VideoPlayerNative src={src} />;
+}
+
+function VideoPlayerNative({ src }: { src: string }) {
+  const player = useVideoPlayer(src, (p) => {
+    p.loop = true;
+    p.muted = false;
+    p.play();
+  });
   return (
     <View style={styles.media}>
-      <WebView
-        originWhitelist={['*']}
+      <VideoView
+        player={player}
         style={{ flex: 1, backgroundColor: '#000' }}
-        source={{
-          html: `
-            <html><body style="margin:0;padding:0;background:#000;display:flex;align-items:center;justify-content:center;">
-              <video src="${src}" controls autoplay loop playsinline
-                style="width:100%;height:100%;object-fit:contain;background:#000;"></video>
-            </body></html>
-          `,
-        }}
-        allowsInlineMediaPlayback
-        mediaPlaybackRequiresUserAction={false}
+        contentFit="contain"
+        nativeControls
+        allowsFullscreen
+        allowsPictureInPicture
       />
     </View>
   );
