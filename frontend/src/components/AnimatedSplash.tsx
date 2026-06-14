@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Platform, Pressable } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -118,11 +118,25 @@ export default function AnimatedSplash({ onDone }: Props) {
   }));
 
   return (
-    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.root, containerStyle]}>
+    <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, styles.root, containerStyle]}>
+      {/* Tap-to-skip backdrop */}
+      <Pressable
+        onPress={() => {
+          // Cancel pending animations and finish immediately
+          containerFade.value = withTiming(0, { duration: 180 }, (finished) => {
+            if (finished) runOnJS(onDone)();
+          });
+        }}
+        style={StyleSheet.absoluteFill}
+        accessibilityLabel="Skip intro animation"
+        testID="splash-skip"
+      />
+
       {/* Backdrop gradient */}
       <LinearGradient
         colors={['#020208', '#06060c', '#020208']}
         style={StyleSheet.absoluteFill}
+        pointerEvents="none"
       />
 
       {/* Sweeping beams */}
@@ -220,5 +234,14 @@ const styles = StyleSheet.create({
           shadowRadius: 8,
           shadowOffset: { width: 0, height: 0 },
         } as any)),
+  },
+  skipHint: {
+    position: 'absolute',
+    bottom: 56,
+    alignSelf: 'center',
+    color: colors.textDim,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 3,
   },
 });

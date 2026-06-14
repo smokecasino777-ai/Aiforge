@@ -14,6 +14,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import {
   ArrowLeft,
   Download,
@@ -312,16 +313,84 @@ function VideoPlayerNative({ src }: { src: string }) {
     p.muted = false;
     p.play();
   });
+  const [scrubFraction, setScrubFraction] = useState<number | null>(null);
+  const [width, setWidth] = useState(1);
+  const [duration, setDuration] = useState(0);
+
+  // Capture duration once the asset loads
+  useEffect(() => {
+    const update = () => {
+      try {
+        const d = (player as any).duration;
+        if (typeof d === 'number' && d > 0) setDuration(d);
+      } catch {}
+    };
+    update();
+    const t = setInterval(update, 1000);
+    return () => clearInterval(t);
+  }, [player]);
+
+  // Pan-anywhere-to-scrub gesture
+  const seekTo = (fraction: number) => {
+    const f = Math.max(0, Math.min(1, fraction));
+    if (duration > 0) {
+      try {
+        player.currentTime = f * duration;
+      } catch {}
+    }
+    setScrubFraction(f);
+  };
+  const endScrub = () => setScrubFraction(null);
+
+  const pan = Gesture.Pan()
+    .runOnJS(true)
+    .activeOffsetX([-6, 6])
+    .onBegin((e) => {
+      // pause for smoother scrub; resume on release
+      try { player.pause(); } catch {}
+      const f = e.x / Math.max(1, width);
+      seekTo(f);
+    })
+    .onUpdate((e) => {
+      const f = e.x / Math.max(1, width);
+      seekTo(f);
+    })
+    .onFinalize(() => {
+      try { player.play(); } catch {}
+      endScrub();
+    });
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const ss = Math.floor(s % 60).toString().padStart(2, '0');
+    return `${m}:${ss}`;
+  };
+
   return (
-    <View style={styles.media}>
-      <VideoView
-        player={player}
-        style={{ flex: 1, backgroundColor: '#000' }}
-        contentFit="contain"
-        nativeControls
-        allowsFullscreen
-        allowsPictureInPicture
-      />
+    <View style={styles.media} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+      <GestureDetector gesture={pan}>
+        <View style={{ flex: 1 }} collapsable={false}>
+          <VideoView
+            player={player}
+            style={{ flex: 1, backgroundColor: '#000' }}
+            contentFit="contain"
+            nativeControls={scrubFraction === null}
+            allowsFullscreen
+            allowsPictureInPicture
+          />
+          {/* Scrub overlay */}
+          {scrubFraction !== null && duration > 0 && (
+            <View pointerEvents="none" style={styles.scrubOverlay}>
+              <View style={[styles.scrubBar, { width: `${scrubFraction * 100}%` }]} />
+              <View style={styles.scrubTimeWrap}>
+                <Text style={styles.scrubTimeText}>
+                  {formatTime(scrubFraction * duration)} / {formatTime(duration)}
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
+      </GestureDetector>
     </View>
   );
 }
@@ -482,6 +551,34 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
   },
   media: { width: '100%', height: '100%' },
+  scrubOverlay: {
+    position: 'absolute',
+    left: 0, right: 0, bottom: 0,
+    height: 48,
+    justifyContent: 'flex-end',
+  },
+  scrubBar: {
+    height: 3,
+    backgroundColor: colors.cyan,
+    boxShadow: '0px 0px 8px rgba(0,240,255,0.9)' as any,
+  },
+  scrubTimeWrap: {
+    position: 'absolute',
+    top: 8,
+    alignSelf: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(2,2,8,0.85)',
+    borderColor: colors.cyan + '88',
+    borderWidth: 1,
+  },
+  scrubTimeText: {
+    color: colors.cyan,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    fontSize: 12,
+  },
   processing: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   processingText: { color: colors.textDim, fontSize: 13, textAlign: 'center', paddingHorizontal: 24 },
   failed: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
