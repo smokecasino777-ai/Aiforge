@@ -15,6 +15,8 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 import {
   ArrowLeft,
   Box,
@@ -32,6 +34,7 @@ import StarryBackground from '@/src/components/StarryBackground';
 import PressableScale from '@/src/components/PressableScale';
 import PulsingLogo from '@/src/components/Logo';
 import Scad3DViewer, { Scad3DViewerHandle } from '@/src/components/Scad3DViewer';
+import FeatureTour from '@/src/components/FeatureTour';
 import { colors, radius } from '@/src/theme/colors';
 import { api, Creation } from '@/src/api/client';
 
@@ -48,6 +51,26 @@ export default function CADGenerator() {
   const router = useRouter();
   const { source } = useLocalSearchParams<{ source?: string }>();
   const viewerRef = useRef<Scad3DViewerHandle>(null);
+
+  // Pinch-to-zoom gesture wraps the WebView and throttles native pinches into
+  // discrete zoomIn/zoomOut calls on the Three.js camera.
+  const pinchLast = useRef(1);
+  const pinch = Gesture.Pinch()
+    .runOnJS(true)
+    .onBegin(() => {
+      pinchLast.current = 1;
+    })
+    .onUpdate((e) => {
+      const scale = e.scale;
+      // emit at ~8% deltas so we don't overwhelm the WebView
+      if (scale / pinchLast.current > 1.08) {
+        viewerRef.current?.zoomIn();
+        pinchLast.current = scale;
+      } else if (scale / pinchLast.current < 0.92) {
+        viewerRef.current?.zoomOut();
+        pinchLast.current = scale;
+      }
+    });
 
   // History stack so the user can undo to previous generations.
   const [history, setHistory] = useState<{ code: string; preview: string | null; prompt: string; createdAt: number; creationId?: string }[]>([]);
@@ -205,18 +228,20 @@ export default function CADGenerator() {
 
           {/* Viewport */}
           <View style={styles.viewportFrame}>
-            <View style={styles.viewportInner}>
-              {current ? (
-                <Scad3DViewer
-                  ref={viewerRef}
-                  scadCode={current.code}
-                  previewBase64={current.preview}
-                  hideToolbar
-                />
-              ) : (
-                <EmptyViewport />
-              )}
-            </View>
+            <GestureDetector gesture={pinch}>
+              <View style={styles.viewportInner} collapsable={false}>
+                {current ? (
+                  <Scad3DViewer
+                    ref={viewerRef}
+                    scadCode={current.code}
+                    previewBase64={current.preview}
+                    hideToolbar
+                  />
+                ) : (
+                  <EmptyViewport />
+                )}
+              </View>
+            </GestureDetector>
             <View style={styles.viewportTag}>
               <View style={styles.dot} />
               <Text style={styles.viewportTagText}>
@@ -296,6 +321,31 @@ export default function CADGenerator() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* First-visit feature tour */}
+      <FeatureTour
+        storageKey="aiforge_tour_cad"
+        steps={[
+          {
+            emoji: '🧊',
+            title: 'CAD Generator',
+            body: 'Describe any object — gears, vases, robots — and AiForge forges a 3D model + OpenSCAD source ready to print.',
+            color: colors.cyan,
+          },
+          {
+            emoji: '🤏',
+            title: 'Drag · pinch · zoom',
+            body: 'Drag the viewport to rotate. Pinch on the model to zoom in and out smoothly. Tap RESET VIEW to recenter.',
+            color: colors.green,
+          },
+          {
+            emoji: '⬇️',
+            title: 'Export STL',
+            body: 'Tap STL to download a real mesh file. Drop it into any slicer (Cura, PrusaSlicer) and 3D-print.',
+            color: colors.pink,
+          },
+        ]}
+      />
     </View>
   );
 }

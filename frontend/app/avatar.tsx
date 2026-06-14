@@ -41,6 +41,7 @@ import StarryBackground from '@/src/components/StarryBackground';
 import PressableScale from '@/src/components/PressableScale';
 import PulsingLogo from '@/src/components/Logo';
 import GradientButton from '@/src/components/GradientButton';
+import FeatureTour from '@/src/components/FeatureTour';
 import { colors, radius } from '@/src/theme/colors';
 import { api } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
@@ -323,6 +324,31 @@ export default function AvatarMaker() {
           </Animated.View>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      {/* First-visit feature tour */}
+      <FeatureTour
+        storageKey="aiforge_tour_avatar"
+        steps={[
+          {
+            emoji: '👤',
+            title: 'Avatar Maker',
+            body: 'Type a sentence about yourself and AiForge crafts a 1:1 portrait in your chosen style.',
+            color: colors.pink,
+          },
+          {
+            emoji: '🎨',
+            title: 'Six cyberpunk-grade styles',
+            body: 'Cyberpunk · Anime · Neon Noir · Fantasy · Pixel Art · Cinematic. Pick one and the prompt is composed automatically for you.',
+            color: colors.purple,
+          },
+          {
+            emoji: '✅',
+            title: 'Use as profile picture',
+            body: 'Hit “Use as Profile” to slap your new portrait onto your Profile tab. Re-generate any time.',
+            color: colors.green,
+          },
+        ]}
+      />
     </View>
   );
 }

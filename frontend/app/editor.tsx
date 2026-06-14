@@ -49,6 +49,7 @@ import {
 import StarryBackground from '@/src/components/StarryBackground';
 import PressableScale from '@/src/components/PressableScale';
 import PulsingLogo from '@/src/components/Logo';
+import FeatureTour from '@/src/components/FeatureTour';
 import { colors, radius } from '@/src/theme/colors';
 import { api, Creation, BACKEND_URL } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
@@ -660,6 +661,31 @@ export default function Editor() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* First-visit feature tour */}
+      <FeatureTour
+        storageKey="aiforge_tour_editor"
+        steps={[
+          {
+            emoji: '⚡',
+            title: 'The Editor',
+            body: 'Upload a photo / video or pull one from your Library, then crop, trim, rotate, flip, and add text overlays — all gesture-friendly.',
+            color: colors.green,
+          },
+          {
+            emoji: '🤖',
+            title: 'AI tools at your fingertips',
+            body: 'Tap Enhance to 4K-ify, Style to convert to anime/cyberpunk/oil paint, BG Remove to isolate the subject, and Caption to get viral social copy.',
+            color: colors.cyan,
+          },
+          {
+            emoji: '💾',
+            title: 'Save & share',
+            body: 'Tap the save icon (top-right) — the edited file becomes a new creation in your Library, ready to download or share.',
+            color: colors.pink,
+          },
+        ]}
+      />
     </View>
   );
 }
