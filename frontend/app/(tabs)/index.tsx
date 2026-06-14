@@ -10,7 +10,7 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ImageIcon, Video, Box, MessageSquare, ArrowRight, Sparkles, Zap } from 'lucide-react-native';
+import { ImageIcon, Video, Box, MessageSquare, ArrowRight, Sparkles, Zap, UserCircle2 } from 'lucide-react-native';
 import StarryBackground from '@/src/components/StarryBackground';
 import GhostLogoBackground from '@/src/components/GhostLogoBackground';
 import PulsingLogo from '@/src/components/Logo';
@@ -192,6 +192,29 @@ export default function Home() {
                 </View>
               </View>
               <ArrowRight size={18} color={colors.cyan} />
+            </LinearGradient>
+          </PressableScale>
+
+          {/* Avatar maker tile */}
+          <PressableScale onPress={() => router.push('/avatar' as any)} testID="home-avatar-tile">
+            <LinearGradient
+              colors={[colors.pink + '26', colors.purple + '14', 'transparent']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.editorTile, { borderColor: colors.pink + '55' }]}
+            >
+              <View style={styles.editorTileLeft}>
+                <View style={[styles.editorTileBadge, { backgroundColor: colors.pink + '22', borderColor: colors.pink + '88' }]}>
+                  <UserCircle2 size={18} color={colors.pink} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.editorTileTitle}>AVATAR MAKER</Text>
+                  <Text style={styles.editorTileSub}>
+                    Style your own portrait · 6 looks · set as profile
+                  </Text>
+                </View>
+              </View>
+              <ArrowRight size={18} color={colors.pink} />
             </LinearGradient>
           </PressableScale>
 

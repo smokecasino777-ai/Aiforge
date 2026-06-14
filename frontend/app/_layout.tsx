@@ -34,6 +34,7 @@ export default function RootLayout() {
             <Stack.Screen name="creation/[id]" options={{ presentation: 'card', animation: 'slide_from_right' }} />
             <Stack.Screen name="editor" options={{ presentation: 'card', animation: 'slide_from_right' }} />
             <Stack.Screen name="cad" options={{ presentation: 'card', animation: 'slide_from_right' }} />
+            <Stack.Screen name="avatar" options={{ presentation: 'card', animation: 'slide_from_right' }} />
             <Stack.Screen name="legal/privacy" options={{ presentation: 'card', animation: 'slide_from_right' }} />
             <Stack.Screen name="legal/terms" options={{ presentation: 'card', animation: 'slide_from_right' }} />
             <Stack.Screen name="admin/secrets" options={{ presentation: 'card', animation: 'slide_from_right' }} />

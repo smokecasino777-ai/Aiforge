@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, Platform, Share } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, Alert, Platform, Share } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { LogOut, Mail, Crown, BarChart2, Shield, Info, Gift, Share2, Copy, Trash2, KeyRound } from 'lucide-react-native';
+import { LogOut, Mail, Crown, BarChart2, Shield, Info, Gift, Share2, Copy, Trash2, KeyRound, UserCircle2 } from 'lucide-react-native';
 import StarryBackground from '@/src/components/StarryBackground';
 import GhostLogoBackground from '@/src/components/GhostLogoBackground';
 import GradientButton from '@/src/components/GradientButton';
@@ -115,16 +115,30 @@ export default function Profile() {
           <Text style={styles.title}>Profile</Text>
 
           <View style={styles.userCard}>
-            <LinearGradient
-              colors={meta.gradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.avatar}
-            >
-              <Text style={styles.avatarText}>
-                {(user?.name || user?.email || '?')[0].toUpperCase()}
-              </Text>
-            </LinearGradient>
+            <PressableScale onPress={() => router.push('/avatar' as any)} testID="profile-avatar-tap">
+              {user?.picture ? (
+                <View style={styles.avatar}>
+                  <Image source={{ uri: user.picture }} style={styles.avatarImg} />
+                  <View style={styles.avatarEditBadge}>
+                    <UserCircle2 size={14} color={colors.pink} />
+                  </View>
+                </View>
+              ) : (
+                <LinearGradient
+                  colors={meta.gradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.avatar}
+                >
+                  <Text style={styles.avatarText}>
+                    {(user?.name || user?.email || '?')[0].toUpperCase()}
+                  </Text>
+                  <View style={styles.avatarEditBadge}>
+                    <UserCircle2 size={14} color={colors.pink} />
+                  </View>
+                </LinearGradient>
+              )}
+            </PressableScale>
             <Text style={styles.name}>{user?.name || 'AiForge Creator'}</Text>
             <View style={styles.emailRow}>
               <Mail size={12} color={colors.textDim} />
@@ -295,7 +309,15 @@ const styles = StyleSheet.create({
     padding: 26,
     gap: 8,
   },
-  avatar: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center' },
+  avatar: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' },
+  avatarImg: { width: '100%', height: '100%' },
+  avatarEditBadge: {
+    position: 'absolute', bottom: -2, right: -2,
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: '#020208',
+    borderColor: colors.pink, borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center',
+  },
   avatarText: { color: '#000', fontWeight: '900', fontSize: 28 },
   name: { color: colors.text, fontSize: 22, fontWeight: '900', marginTop: 6 },
   emailRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },

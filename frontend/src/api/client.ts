@@ -240,6 +240,22 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
+  // ---- Avatar Maker ----
+  async avatarGenerate(prompt: string, style: string) {
+    return request<{ creation_id: string; image_b64: string; media_mime: string; style: string }>(
+      '/avatar/generate',
+      { method: 'POST', body: JSON.stringify({ prompt, style }) },
+    );
+  },
+  async avatarSet(image_b64: string, media_mime = 'image/png') {
+    return request<{ ok: boolean; user: any }>(
+      '/avatar/set',
+      { method: 'POST', body: JSON.stringify({ image_b64, media_mime }) },
+    );
+  },
+  async avatarClear() {
+    return request<{ ok: boolean; user: any }>('/avatar/clear', { method: 'POST' });
+  },
 };
 
 export const BACKEND_URL = BASE;

@@ -8,7 +8,7 @@ from fastapi import APIRouter, FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from core import db, logger, mongo_client
-from routes import admin, assets, auth, checkout, editor, generation, legal, referrals
+from routes import admin, assets, auth, avatar, checkout, editor, generation, legal, referrals
 
 app = FastAPI(title="AiForge API")
 api = APIRouter(prefix="/api")
@@ -28,6 +28,7 @@ api.include_router(referrals.router)
 api.include_router(generation.router)
 api.include_router(checkout.router)
 api.include_router(editor.router)
+api.include_router(avatar.router)
 api.include_router(admin.router)
 
 
