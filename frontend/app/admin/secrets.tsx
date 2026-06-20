@@ -13,7 +13,7 @@ import {
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, Lock, ShieldCheck, AlertTriangle, KeyRound, Eye, EyeOff, RotateCcw, ExternalLink } from 'lucide-react-native';
+import { ArrowLeft, Lock, ShieldCheck, AlertTriangle, KeyRound, Eye, EyeOff, RotateCcw, ExternalLink, UserCog, Search } from 'lucide-react-native';
 import StarryBackground from '@/src/components/StarryBackground';
 import GradientButton from '@/src/components/GradientButton';
 import PressableScale from '@/src/components/PressableScale';
@@ -28,6 +28,16 @@ type Status = {
   is_live: boolean;
 };
 
+type AdminUser = {
+  user_id: string;
+  email: string;
+  name?: string;
+  plan: string;
+  auth_provider?: string;
+  created_at?: string;
+  is_admin?: boolean;
+};
+
 export default function AdminSecrets() {
   const router = useRouter();
   const [status, setStatus] = useState<Status | null>(null);
@@ -39,6 +49,16 @@ export default function AdminSecrets() {
   const [success, setSuccess] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
+  // ----- user-password reset state -----
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [userQuery, setUserQuery] = useState('');
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetReveal, setResetReveal] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetSuccess, setResetSuccess] = useState<string | null>(null);
+
   useEffect(() => {
     (async () => {
       try {
@@ -47,6 +67,12 @@ export default function AdminSecrets() {
         if (me.is_admin) {
           const s = await api.adminGetStripeKey();
           setStatus(s);
+          try {
+            const u = await api.adminListUsers();
+            setUsers(u.users || []);
+          } catch {
+            /* silent — Stripe section still usable */
+          }
         }
       } catch (e: any) {
         setIsAdmin(false);
@@ -109,6 +135,39 @@ export default function AdminSecrets() {
       ],
     );
   };
+
+  const onResetUserPassword = async () => {
+    setResetError(null);
+    setResetSuccess(null);
+    const email = resetEmail.trim().toLowerCase();
+    const pw = resetPassword;
+    if (!email) {
+      setResetError('Pick a user or type their email.');
+      return;
+    }
+    if (!pw || pw.length < 6) {
+      setResetError('New password must be at least 6 characters.');
+      return;
+    }
+    setResetting(true);
+    try {
+      const r = await api.adminResetUserPassword(email, pw);
+      setResetSuccess(`${r.message} (${r.email})`);
+      setResetPassword('');
+      setResetReveal(false);
+    } catch (e: any) {
+      setResetError(e.message || 'Failed to reset password');
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const filteredUsers = userQuery.trim()
+    ? users.filter((u) =>
+        (u.email || '').toLowerCase().includes(userQuery.trim().toLowerCase()) ||
+        (u.name || '').toLowerCase().includes(userQuery.trim().toLowerCase()),
+      ).slice(0, 8)
+    : users.slice(0, 8);
 
   if (loading) {
     return (
@@ -260,6 +319,129 @@ export default function AdminSecrets() {
             small
           />
 
+          {/* ------ Reset User Password (admin-only recovery flow) ------ */}
+          <View style={{ height: 22 }} />
+          <View style={styles.row}>
+            <UserCog size={20} color={colors.green} />
+            <Text style={[styles.cardTitle, { fontSize: 18 }]}>Reset user password</Text>
+          </View>
+          <Text style={[styles.subtitle, { marginTop: -4 }]}>
+            Locked out of a personal account? Issue a fresh password here — no email service required.
+          </Text>
+
+          <View style={[styles.inputCard, { borderColor: colors.green + '55' }]}>
+            <View style={styles.row}>
+              <Search size={14} color={colors.textDim} />
+              <Text style={styles.inputLabel}>Find user</Text>
+            </View>
+            <View style={styles.inputBox}>
+              <TextInput
+                value={userQuery}
+                onChangeText={setUserQuery}
+                placeholder="Type email or name to filter…"
+                placeholderTextColor={colors.textMuted}
+                style={styles.input}
+                autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
+                testID="user-search"
+              />
+            </View>
+
+            {filteredUsers.length > 0 ? (
+              <View style={styles.userList}>
+                {filteredUsers.map((u) => {
+                  const isGoogle = u.auth_provider === 'google';
+                  const isSelected = resetEmail.toLowerCase() === u.email.toLowerCase();
+                  return (
+                    <PressableScale
+                      key={u.user_id}
+                      onPress={() => {
+                        if (isGoogle) return;
+                        setResetEmail(u.email);
+                        setResetError(null);
+                        setResetSuccess(null);
+                      }}
+                      style={{ marginVertical: 2 }}
+                    >
+                      <View
+                        style={[
+                          styles.userRow,
+                          isSelected && { borderColor: colors.green, backgroundColor: colors.green + '14' },
+                          isGoogle && { opacity: 0.5 },
+                        ]}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.userEmail}>{u.email}</Text>
+                          {!!u.name && <Text style={styles.userName}>{u.name}</Text>}
+                        </View>
+                        <View style={[styles.planTag, { borderColor: isGoogle ? colors.textMuted : colors.cyan + '88' }]}>
+                          <Text style={[styles.planTagText, { color: isGoogle ? colors.textMuted : colors.cyan }]}>
+                            {isGoogle ? 'GOOGLE' : (u.plan || 'free').toUpperCase()}
+                          </Text>
+                        </View>
+                      </View>
+                    </PressableScale>
+                  );
+                })}
+              </View>
+            ) : null}
+
+            <View style={{ height: 8 }} />
+            <Text style={styles.inputLabel}>Target email</Text>
+            <View style={styles.inputBox}>
+              <TextInput
+                value={resetEmail}
+                onChangeText={setResetEmail}
+                placeholder="user@example.com"
+                placeholderTextColor={colors.textMuted}
+                style={styles.input}
+                autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
+                keyboardType="email-address"
+                testID="reset-email"
+              />
+            </View>
+
+            <View style={{ height: 6 }} />
+            <Text style={styles.inputLabel}>New password (6+ chars)</Text>
+            <View style={styles.inputBox}>
+              <TextInput
+                value={resetPassword}
+                onChangeText={setResetPassword}
+                placeholder="New password"
+                placeholderTextColor={colors.textMuted}
+                style={styles.input}
+                autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
+                secureTextEntry={!resetReveal}
+                testID="reset-password"
+              />
+              <PressableScale onPress={() => setResetReveal((v) => !v)}>
+                <View style={styles.revealBtn}>
+                  {resetReveal ? <EyeOff size={16} color={colors.textDim} /> : <Eye size={16} color={colors.textDim} />}
+                </View>
+              </PressableScale>
+            </View>
+
+            {resetError ? <Text style={styles.errText}>{resetError}</Text> : null}
+            {resetSuccess ? <Text style={styles.successText}>{resetSuccess}</Text> : null}
+
+            <GradientButton
+              title="Issue new password"
+              onPress={onResetUserPassword}
+              loading={resetting}
+              testID="reset-user-pw-btn"
+              style={{ marginTop: 12 }}
+            />
+            <Text style={styles.helper}>
+              The user can now sign in with this new password. Tell them to change it from
+              Profile after their next sign-in.
+            </Text>
+          </View>
+
           <View style={{ height: 100 }} />
         </ScrollView>
       </SafeAreaView>
@@ -334,4 +516,25 @@ const styles = StyleSheet.create({
   helper: { color: colors.textDim, fontSize: 11, lineHeight: 16 },
   errText: { color: colors.red, fontSize: 12, fontWeight: '700' },
   successText: { color: colors.green, fontSize: 12, fontWeight: '700' },
+  userList: { gap: 0, marginTop: 4 },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#06060c',
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  userEmail: { color: colors.text, fontSize: 13, fontWeight: '700' },
+  userName: { color: colors.textDim, fontSize: 11, marginTop: 2 },
+  planTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  planTagText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
 });

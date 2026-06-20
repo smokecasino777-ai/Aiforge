@@ -99,6 +99,20 @@ export default function Login() {
               />
 
               <PressableScale
+                onPress={() =>
+                  Alert.alert(
+                    'Reset your password',
+                    'Sign in as the demo / owner account (demo@example.com / demo1234), then go to:\n\nProfile → Owner · App Secrets → Reset user password\n\nFrom there you can issue a fresh password for any email account in seconds — no email service required.',
+                    [{ text: 'Got it' }],
+                  )
+                }
+                style={{ marginTop: 14, alignSelf: 'center' }}
+                testID="forgot-password"
+              >
+                <Text style={styles.forgotText}>Forgot password?</Text>
+              </PressableScale>
+
+              <PressableScale
                 onPress={() => router.push('/(auth)/register')}
                 style={{ marginTop: 22 }}
               >
@@ -154,6 +168,7 @@ const styles = StyleSheet.create({
   input: { flex: 1, color: colors.text, fontSize: 15 },
   linkText: { color: colors.textDim, textAlign: 'center', fontSize: 13 },
   linkAccent: { color: colors.green, fontWeight: '700' },
+  forgotText: { color: colors.cyan, fontSize: 12, fontWeight: '800', letterSpacing: 0.4, textDecorationLine: 'underline' },
   footer: { alignItems: 'center' },
   footerText: { color: colors.textMuted, fontSize: 12, letterSpacing: 1 },
 });

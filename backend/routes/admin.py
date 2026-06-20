@@ -1,9 +1,12 @@
 """Owner-only Secrets management (Stripe key rotation, audit, mode check)."""
+import bcrypt
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, EmailStr
 
 from core import (
     RUNTIME,
     current_stripe_key,
+    db,
     ensure_admin,
     get_current_user,
     iso,
@@ -17,6 +20,11 @@ from core import (
 from models import StripeKeyRequest
 
 router = APIRouter(tags=["admin"])
+
+
+class AdminResetPasswordRequest(BaseModel):
+    email: EmailStr
+    new_password: str
 
 
 @router.get("/admin/me")
@@ -97,3 +105,69 @@ async def admin_stripe_key_revoke(user: dict = Depends(get_current_user)):
     RUNTIME["stripe_updated_at"] = now
     logger.info(f"Stripe key reset to sandbox by {user.get('email')}")
     return {"ok": True, "mode": "sandbox", "fingerprint": fp, "updated_at": now}
+
+
+# ---------------------------------------------------------------------------
+# User account management (owner-only)
+# ---------------------------------------------------------------------------
+@router.get("/admin/users")
+async def admin_list_users(user: dict = Depends(get_current_user)):
+    """Compact list of every account in the system (owner-only).
+
+    Used by the Admin Secrets page to populate the "Reset User Password"
+    picker so the owner can recover a locked-out account without ever
+    pasting passwords into chat.
+    """
+    await ensure_admin(user)
+    cursor = db.users.find(
+        {},
+        {
+            "_id": 0,
+            "user_id": 1,
+            "email": 1,
+            "name": 1,
+            "plan": 1,
+            "auth_provider": 1,
+            "created_at": 1,
+            "is_admin": 1,
+        },
+    ).sort("created_at", -1)
+    users = await cursor.to_list(500)
+    return {"users": users, "count": len(users)}
+
+
+@router.post("/admin/reset-user-password")
+async def admin_reset_user_password(
+    req: AdminResetPasswordRequest,
+    user: dict = Depends(get_current_user),
+):
+    """Owner-initiated password reset for any email/password account.
+
+    This is the in-app recovery path so a locked-out user can ask the owner
+    (logged in as the demo/admin account) to issue a new password without
+    any out-of-band email service.
+    """
+    await ensure_admin(user)
+    email = req.email.lower().strip()
+    pw = (req.new_password or "").strip()
+    if len(pw) < 6:
+        raise HTTPException(
+            status_code=400, detail="New password must be at least 6 characters"
+        )
+    target = await db.users.find_one({"email": email}, {"_id": 0, "user_id": 1, "auth_provider": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="No account with that email")
+    if target.get("auth_provider") == "google":
+        raise HTTPException(
+            status_code=400,
+            detail="That account is Google-only; cannot reset email/password.",
+        )
+    new_hash = bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
+    await db.users.update_one(
+        {"user_id": target["user_id"]},
+        {"$set": {"password_hash": new_hash, "password_reset_at": iso(now_utc())}},
+    )
+    logger.info(
+        f"Admin {user.get('email')} reset password for {email} (user_id={target['user_id']})"
+    )
+    return {"ok": True, "email": email, "message": "Password updated."}

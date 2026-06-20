@@ -61,8 +61,22 @@ def stripe_mode_of(key: str) -> str:
 
 
 # ----- DB -----
+# In Emergent production deployments the Atlas user is scoped to a specific
+# database whose name is embedded inside MONGO_URL itself (e.g. mongodb+srv://
+# user:pass@host/<dbname>?...). Hard-coding the DB name from DB_NAME causes
+# `OperationFailure: not authorized on <dbname> to execute command { find: … }`.
+# `get_default_database()` reads whatever DB is declared in the URI, which is
+# guaranteed to match the user's authorized scope. We fall back to DB_NAME for
+# local dev where the URI has no DB component (e.g. mongodb://localhost:27017).
 mongo_client = AsyncIOMotorClient(MONGO_URL)
-db = mongo_client[DB_NAME]
+try:
+    _default_db = mongo_client.get_default_database()
+except Exception:
+    _default_db = None
+if _default_db is not None:
+    db = _default_db
+else:
+    db = mongo_client[DB_NAME]
 
 logging.basicConfig(
     level=logging.INFO,

@@ -197,6 +197,29 @@ export const api = {
       { method: 'DELETE' },
     );
   },
+  async adminListUsers() {
+    return request<{
+      users: Array<{
+        user_id: string;
+        email: string;
+        name?: string;
+        plan: string;
+        auth_provider?: string;
+        created_at?: string;
+        is_admin?: boolean;
+      }>;
+      count: number;
+    }>('/admin/users');
+  },
+  async adminResetUserPassword(email: string, newPassword: string) {
+    return request<{ ok: boolean; email: string; message: string }>(
+      '/admin/reset-user-password',
+      {
+        method: 'POST',
+        body: JSON.stringify({ email, new_password: newPassword }),
+      },
+    );
+  },
   // ---- Editor (AI image / video edit) ----
   async editorEnhance(image_b64: string) {
     return request<{ image_b64: string; media_mime: string; op: string }>(
