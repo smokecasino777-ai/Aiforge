@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/src/context/AuthContext';
 import StarryBackground from '@/src/components/StarryBackground';
@@ -18,31 +18,80 @@ import PulsingLogo from '@/src/components/Logo';
 import GradientButton from '@/src/components/GradientButton';
 import PressableScale from '@/src/components/PressableScale';
 import { colors, radius } from '@/src/theme/colors';
-import { Mail, Lock } from 'lucide-react-native';
+import { Mail, Lock, Sparkles } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function Login() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ email?: string }>();
   const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const onLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Required', 'Enter email and password');
-      return;
+  // Pre-fill email when user is forwarded from "Email already registered → Sign in instead"
+  useEffect(() => {
+    if (typeof params.email === 'string' && params.email && !email) {
+      setEmail(params.email);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.email]);
+
+  const doSignIn = async (e: string, p: string) => {
     setLoading(true);
     try {
-      await signIn(email.trim(), password);
+      await signIn(e, p);
       router.replace('/(tabs)');
-    } catch (e: any) {
-      Alert.alert('Sign-in failed', e.message);
+    } catch (err: any) {
+      const raw = (err?.message || '').toLowerCase();
+      const isCreds = raw.includes('invalid') || raw.includes('401');
+      const friendly = isCreds
+        ? 'Email and password don’t match.'
+        : err?.message || 'Something went wrong. Try again.';
+      Alert.alert('Sign-in failed', friendly, [
+        { text: 'Try again', style: 'cancel' },
+        { text: 'Forgot password?', onPress: showRecovery },
+        {
+          text: 'Create account',
+          onPress: () =>
+            router.push({ pathname: '/(auth)/register', params: { email: e } }),
+        },
+      ]);
     } finally {
       setLoading(false);
     }
   };
+
+  const onLogin = async () => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed || !password) {
+      Alert.alert('Required', 'Enter your email and password to sign in.');
+      return;
+    }
+    if (!EMAIL_RE.test(trimmed)) {
+      Alert.alert('Check email format', 'Please enter a valid email address.');
+      return;
+    }
+    await doSignIn(trimmed, password);
+  };
+
+  const showRecovery = () => {
+    Alert.alert(
+      'Reset your password',
+      'No email server is needed. Sign in as the owner account below, then go to:\n\nProfile → Owner · App Secrets → Reset user password\n\nPick the locked-out email and issue a fresh password instantly.',
+      [
+        {
+          text: 'Use demo / owner account',
+          onPress: () => doSignIn('demo@example.com', 'demo1234'),
+        },
+        { text: 'OK' },
+      ],
+    );
+  };
+
+  const onDemoLogin = () => doSignIn('demo@example.com', 'demo1234');
 
   return (
     <View style={styles.root}>
@@ -72,7 +121,10 @@ export default function Login() {
                   value={email}
                   onChangeText={setEmail}
                   autoCapitalize="none"
+                  autoCorrect={false}
+                  spellCheck={false}
                   keyboardType="email-address"
+                  returnKeyType="next"
                   style={styles.input}
                 />
               </View>
@@ -86,6 +138,11 @@ export default function Login() {
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  returnKeyType="go"
+                  onSubmitEditing={onLogin}
                   style={styles.input}
                 />
               </View>
@@ -99,13 +156,19 @@ export default function Login() {
               />
 
               <PressableScale
-                onPress={() =>
-                  Alert.alert(
-                    'Reset your password',
-                    'Sign in as the demo / owner account (demo@example.com / demo1234), then go to:\n\nProfile → Owner · App Secrets → Reset user password\n\nFrom there you can issue a fresh password for any email account in seconds — no email service required.',
-                    [{ text: 'Got it' }],
-                  )
-                }
+                onPress={onDemoLogin}
+                style={{ marginTop: 10, alignSelf: 'center' }}
+                testID="demo-login"
+                disabled={loading}
+              >
+                <View style={styles.demoChip}>
+                  <Sparkles size={12} color={colors.green} />
+                  <Text style={styles.demoChipText}>Use demo account (one tap)</Text>
+                </View>
+              </PressableScale>
+
+              <PressableScale
+                onPress={showRecovery}
                 style={{ marginTop: 14, alignSelf: 'center' }}
                 testID="forgot-password"
               >
@@ -169,6 +232,18 @@ const styles = StyleSheet.create({
   linkText: { color: colors.textDim, textAlign: 'center', fontSize: 13 },
   linkAccent: { color: colors.green, fontWeight: '700' },
   forgotText: { color: colors.cyan, fontSize: 12, fontWeight: '800', letterSpacing: 0.4, textDecorationLine: 'underline' },
+  demoChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.green + '14',
+    borderColor: colors.green + '55',
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: radius.pill,
+  },
+  demoChipText: { color: colors.green, fontSize: 12, fontWeight: '800' },
   footer: { alignItems: 'center' },
   footerText: { color: colors.textMuted, fontSize: 12, letterSpacing: 1 },
 });

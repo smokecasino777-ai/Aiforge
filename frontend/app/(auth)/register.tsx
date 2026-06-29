@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/src/context/AuthContext';
 import StarryBackground from '@/src/components/StarryBackground';
 import GhostLogoBackground from '@/src/components/GhostLogoBackground';
@@ -20,8 +20,11 @@ import { colors, radius } from '@/src/theme/colors';
 import { Mail, Lock, User, Gift } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function Register() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ email?: string }>();
   const { signUp } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -29,21 +32,62 @@ export default function Register() {
   const [referral, setReferral] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Pre-fill email when forwarded from login (e.g. "Create account" button).
+  useEffect(() => {
+    if (typeof params.email === 'string' && params.email && !email) {
+      setEmail(params.email);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.email]);
+
   const onRegister = async () => {
-    if (!email || !password) {
-      Alert.alert('Required', 'Enter email and password');
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed || !password) {
+      Alert.alert('Required', 'Enter your email and password.');
+      return;
+    }
+    if (!EMAIL_RE.test(trimmed)) {
+      Alert.alert('Check email format', 'Please enter a valid email address.');
       return;
     }
     if (password.length < 6) {
-      Alert.alert('Password too short', 'Use at least 6 characters');
+      Alert.alert('Password too short', 'Use at least 6 characters.');
       return;
     }
     setLoading(true);
     try {
-      await signUp(email.trim(), password, name.trim() || undefined, referral.trim() || undefined);
+      await signUp(
+        trimmed,
+        password,
+        name.trim() || undefined,
+        referral.trim() || undefined,
+      );
       router.replace('/(tabs)');
     } catch (e: any) {
-      Alert.alert('Sign-up failed', e.message);
+      const raw = (e?.message || '').toLowerCase();
+      const taken =
+        raw.includes('already registered') ||
+        raw.includes('already exists') ||
+        raw.includes('400');
+      if (taken) {
+        Alert.alert(
+          'Email already registered',
+          'Looks like you already have an account with this email. Want to sign in instead?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Sign in',
+              onPress: () =>
+                router.replace({
+                  pathname: '/(auth)/login',
+                  params: { email: trimmed },
+                }),
+            },
+          ],
+        );
+      } else {
+        Alert.alert('Sign-up failed', e?.message || 'Something went wrong.');
+      }
     } finally {
       setLoading(false);
     }
