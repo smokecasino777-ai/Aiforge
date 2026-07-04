@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.aiforge.app",
+      "bundleIdentifier": "app.emergent.fierceforgeios2c75fc60",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "Pick photos and videos to edit with AI",
@@ -19,7 +19,7 @@
       }
     },
     "android": {
-      "package": "com.aiforge.app",
+      "package": "app.emergent.fierceforgeios2c75fc60",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#020208"
