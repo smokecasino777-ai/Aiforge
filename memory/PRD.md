@@ -80,3 +80,11 @@ See `/app/memory/test_credentials.md`.
 
 ## Owner admin
 - Default admin = oldest user (auto-promoted on first hit) OR whoever's email matches `ADMIN_EMAIL` in `.env`. Current: `demo@example.com`.
+
+## Update (2026-06) — Admin/Customer separation + production lockdown
+- Owner/admin account: jraycwalker@gmail.com (idempotently seeded at backend startup via ADMIN_EMAIL + ADMIN_PASSWORD env; only admin in system).
+- demo@example.com demoted to plain customer; public "Use demo account" one-tap button removed from login.
+- Removed first-user auto-promote fallback (security hole in fresh production DBs).
+- NEW sudo mode: Admin Secrets page requires re-entering admin password (POST /api/admin/unlock → 15-min sudo JWT sent as X-Admin-Unlock). All sensitive admin endpoints 403 without it.
+- Customer password recovery: "Forgot password?" → email the owner (mailto), owner resets via unlocked admin panel.
+- Verified: testing iteration_8 (18/18 backend + full frontend flows) PASS; deployment_agent PASS.
