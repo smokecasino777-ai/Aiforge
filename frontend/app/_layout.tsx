@@ -1,75 +1,14 @@
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect, useRef } from 'react';
-import { Platform } from 'react-native';
-import * as Linking from 'expo-linking';
+import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { useIconFonts } from '@/src/hooks/use-icon-fonts';
-import { AuthProvider, useAuth } from '@/src/context/AuthContext';
-import { extractSessionId } from '@/src/utils/googleAuth';
+import { AuthProvider } from '@/src/context/AuthContext';
 
 SplashScreen.preventAutoHideAsync();
-
-/**
- * Watches the environment for a `session_id` that Emergent Google Auth
- * bounced back on us (web: URL hash; mobile: cold-start URL or deep link).
- * On finding one, calls signInWithGoogleSession() which stores our JWT.
- * Cleans the URL fragment on web so refresh doesn't re-process.
- */
-function GoogleSessionCatcher() {
-  const { signInWithGoogleSession } = useAuth();
-  const router = useRouter();
-  const processedRef = useRef<Set<string>>(new Set());
-
-  const process = async (url: string | null | undefined) => {
-    const sid = extractSessionId(url);
-    if (!sid || processedRef.current.has(sid)) return;
-    processedRef.current.add(sid);
-    try {
-      await signInWithGoogleSession(sid);
-      router.replace('/(tabs)');
-    } catch {
-      // silent — user stays on current screen so they can retry
-    } finally {
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        // Strip the fragment so refresh / share-link doesn't re-fire.
-        try {
-          window.history.replaceState(null, '', window.location.pathname);
-        } catch {
-          /* ignore */
-        }
-      }
-    }
-  };
-
-  useEffect(() => {
-    // Web: parse current URL on mount.
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const href = window.location.href;
-      if (href.includes('session_id=')) {
-        void process(href);
-      }
-      return;
-    }
-
-    // Native: cold start deep link.
-    Linking.getInitialURL().then((url) => {
-      if (url && url.includes('session_id=')) void process(url);
-    });
-
-    // Native: hot deep link while app is running.
-    const sub = Linking.addEventListener('url', ({ url }) => {
-      if (url && url.includes('session_id=')) void process(url);
-    });
-    return () => sub.remove();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return null;
-}
 
 export default function RootLayout() {
   const [loaded, error] = useIconFonts();
@@ -86,7 +25,6 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#020208' }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <GoogleSessionCatcher />
           <StatusBar style="light" />
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#020208' } }}>
             <Stack.Screen name="index" />

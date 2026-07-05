@@ -18,16 +18,15 @@ import PulsingLogo from '@/src/components/Logo';
 import GradientButton from '@/src/components/GradientButton';
 import PressableScale from '@/src/components/PressableScale';
 import { colors, radius } from '@/src/theme/colors';
-import { Mail, Lock, Sparkles, Chrome } from 'lucide-react-native';
+import { Mail, Lock, Sparkles } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { startGoogleSignIn } from '@/src/utils/googleAuth';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function Login() {
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string }>();
-  const { signIn, signInWithGoogleSession } = useAuth();
+  const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -94,27 +93,6 @@ export default function Login() {
 
   const onDemoLogin = () => doSignIn('demo@example.com', 'demo1234');
 
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const onGoogleSignIn = async () => {
-    setGoogleLoading(true);
-    try {
-      const sid = await startGoogleSignIn();
-      // Web: startGoogleSignIn triggers a full-page redirect and returns null.
-      // Mobile: browser closes and returns sid we can exchange right here.
-      if (sid) {
-        await signInWithGoogleSession(sid);
-        router.replace('/(tabs)');
-      }
-    } catch (e: any) {
-      Alert.alert(
-        'Google sign-in failed',
-        e?.message || 'Could not complete Google sign-in. Please try again.',
-      );
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
-
   return (
     <View style={styles.root}>
       <StarryBackground />
@@ -176,25 +154,6 @@ export default function Login() {
                 testID="login-submit"
                 style={{ marginTop: 18 }}
               />
-
-              <View style={styles.divider}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>OR</Text>
-                <View style={styles.dividerLine} />
-              </View>
-
-              <PressableScale
-                onPress={onGoogleSignIn}
-                disabled={googleLoading || loading}
-                testID="google-signin"
-              >
-                <View style={styles.googleBtn}>
-                  <Chrome size={18} color={colors.text} />
-                  <Text style={styles.googleBtnText}>
-                    {googleLoading ? 'Opening Google…' : 'Continue with Google'}
-                  </Text>
-                </View>
-              </PressableScale>
 
               <PressableScale
                 onPress={onDemoLogin}
@@ -285,22 +244,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   demoChipText: { color: colors.green, fontSize: 12, fontWeight: '800' },
-  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16, marginBottom: 4 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
-  dividerText: { color: colors.textMuted, fontSize: 11, letterSpacing: 2, fontWeight: '700' },
-  googleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: '#141420',
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    height: 52,
-    paddingHorizontal: 18,
-  },
-  googleBtnText: { color: colors.text, fontSize: 15, fontWeight: '700' },
   footer: { alignItems: 'center' },
   footerText: { color: colors.textMuted, fontSize: 12, letterSpacing: 1 },
 });
