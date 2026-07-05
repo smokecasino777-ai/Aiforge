@@ -30,15 +30,32 @@ router = APIRouter(tags=["auth"])
 
 @router.post("/auth/register", response_model=AuthResponse)
 async def register(req: RegisterRequest):
-    existing = await db.users.find_one({"email": req.email.lower()})
+    email = req.email.lower().strip()
+    existing = await db.users.find_one({"email": email}, {"_id": 0, "auth_provider": 1})
     if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        provider = existing.get("auth_provider") or "email"
+        if provider == "google":
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "This email is already registered via Google Sign-In. "
+                    "Please use the Google button on the login screen instead."
+                ),
+            )
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "This email already has an account. "
+                "Tap 'Sign in' on the login screen, "
+                "or use 'Forgot password?' if you can't remember it."
+            ),
+        )
     user_id = f"user_{uuid.uuid4().hex[:12]}"
     hashed = bcrypt.hashpw(req.password.encode(), bcrypt.gensalt()).decode()
     doc = {
         "user_id": user_id,
-        "email": req.email.lower(),
-        "name": req.name or req.email.split("@")[0],
+        "email": email,
+        "name": req.name or email.split("@")[0],
         "picture": None,
         "password_hash": hashed,
         "plan": "free",
@@ -70,11 +87,29 @@ async def register(req: RegisterRequest):
 
 @router.post("/auth/login", response_model=AuthResponse)
 async def login(req: LoginRequest):
-    user = await db.users.find_one({"email": req.email.lower()}, {"_id": 0})
-    if not user or not user.get("password_hash"):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    email = req.email.lower().strip()
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="No account with that email. Tap 'Create account' to sign up.",
+        )
+    # Guide Google-auth users to the correct sign-in path
+    if not user.get("password_hash"):
+        provider = user.get("auth_provider") or "google"
+        raise HTTPException(
+            status_code=401,
+            detail=(
+                f"This account uses {provider.title()} Sign-In. "
+                "Ask the app owner to set a password from Owner · App Secrets, "
+                "or sign in through the same provider you used originally."
+            ),
+        )
     if not bcrypt.checkpw(req.password.encode(), user["password_hash"].encode()):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(
+            status_code=401,
+            detail="Wrong password. Tap 'Forgot password?' to have the owner issue a new one.",
+        )
     token = make_token(user["user_id"])
     return AuthResponse(token=token, user=await user_to_out(user))
 
