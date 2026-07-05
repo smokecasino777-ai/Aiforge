@@ -1,0 +1,42 @@
+{
+  "summary": "Iteration 8 (Play-Store launch: admin lockdown + sudo mode + demo demotion). BACKEND: 18/18 pass in 4.89s via new /app/backend/tests/test_admin_lockdown_iter8.py — owner login (jraycwalker@gmail.com/KandiceJray1$) → 200 + is_admin=true; /api/admin/users → 403 WITHOUT X-Admin-Unlock; /api/admin/stripe-key GET → 403 WITHOUT sudo; POST /api/admin/unlock with wrong password → 401; correct password → 200 + sudo_token + expires_in_minutes=15; WITH X-Admin-Unlock header: /admin/users → 200 (returns owner + demo + alice + bob + others), /admin/stripe-key → 200 with mode=sandbox/is_sandbox=true/is_live=false, /admin/reset-user-password → 200. DEMO DEMOTION: demo@example.com/demo1234 login OK but /admin/me → is_admin=false, /admin/users → 403, /admin/unlock → 403 (blocked at ensure_admin BEFORE sudo check). BOB PASSWORD RESET E2E: owner + sudo → POST /admin/reset-user-password { bob@example.com, bobnew123 } → 200; bob login with bobnew123 → 200; bob login with old bob12345 → 401. REGISTRATION SMOKE: new TEST_iter8_* email → 200; duplicate → 400. /api/plans → 6 plans. FRONTEND (mobile 390x844): /login renders with login-email/login-password/login-submit; NO demo-login testID, NO 'Use demo account' text, NO 'Continue with Google', NO 'google' string anywhere in body. Customer flow: demo login → lands on / (tabs); Profile hides menu-admin-secrets AND menu-beta-tester (both testIDs absent, no 'Owner · App Secrets' or 'Invite Beta Testers' text). Admin flow: sign in as jraycwalker@gmail.com/KandiceJray1$ → tabs; Profile SHOWS 'App Secrets' + menu-admin-secrets + 'Invite Beta Testers'; open /admin/secrets → 'Admin locked' gate renders with admin-unlock-password + admin-unlock-btn testIDs; wrong password → inline red 'Wrong admin password' error text renders (Alert.alert no-op on web, confirmed inline error IS shown); correct password → panel unlocks showing 'App Secrets' heading, 'SANDBOX (test only)' badge, stripe-key-input, 'Reset user password' section with reset-email + reset-password + reset-user-pw-btn testIDs. Zero pageerrors, only warning is the harmless props.pointerEvents deprecation from react-native-web. Play Store lockdown = GREEN.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/admin/secrets (unlock gate)", "issues": ["Wrong-password inline error text renders correctly on web (unlike login/register where Alert.alert is a no-op) — this is the intended behavior per iter-7 notes and works. Not a bug."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_admin_lockdown_iter8.py",
+    "/app/test_reports/pytest/pytest_iter8.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "core.py::ensure_admin correctly checks ADMIN_EMAIL env var first, then falls back to user.is_admin flag. The dangerous first-user auto-promote fallback is confirmed removed.",
+    "admin.py::ensure_sudo runs AFTER ensure_admin, so non-admin (demo) hits ensure_admin 403 before ever reaching the sudo check — verified via test_demo_unlock_forbidden (demo POST /admin/unlock → 403 not 401). Correct.",
+    "make_sudo_token / verify_sudo_token embed sub=user_id + sudo=true + 15-min exp signed with JWT_SECRET. verify_sudo_token also confirms sub matches the caller — so one admin's sudo token cannot be replayed by another. Solid.",
+    "Frontend src/api/client.ts::request auto-injects X-Admin-Unlock ONLY for paths starting with /admin, and only when adminUnlockToken is set. setAdminUnlockToken(null) is called from AdminSecrets useEffect cleanup, so leaving the page reliably relocks. Memory-only (never persisted) — matches security model.",
+    "Frontend profile.tsx correctly gates menu-beta-tester AND menu-admin-secrets behind isAdmin (from /api/admin/me). Confirmed hidden for demo, shown for owner.",
+    "login.tsx has NO demo-login button and NO Google button — verified via testID lookup and full-body innerText grep (zero 'google' occurrences).",
+    "Backend /api/auth/google endpoint still exists (unused). Per main-agent note, this is intentional; not flagged."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_admin_lockdown_iter8.py (new)",
+    "/app/memory/test_credentials.md (bob password updated to bobnew123 after the successful reset test)"
+  ],
+  "success_rate": {
+    "backend": "100% (18/18)",
+    "frontend": "100% (all P0 customer + admin gate + unlock + reveal flows)"
+  },
+  "seed_data_creation": "One throwaway TEST_iter8_<uuid>@example.com registered for the duplicate-email test. Bob's password was rotated from bob12345 → bobnew123 as part of the admin-reset E2E (test_credentials.md updated accordingly). No other state changes.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Admin lockdown design summary — Owner: jraycwalker@gmail.com / KandiceJray1$ (trailing $ IS part of the password, seeded idempotently by backend on startup from ADMIN_EMAIL + ADMIN_PASSWORD in backend/.env). Sensitive admin endpoints require BOTH a valid admin JWT AND a X-Admin-Unlock header carrying a 15-minute sudo JWT minted by POST /api/admin/unlock. Sudo token is memory-only client-side (setAdminUnlockToken); leaving /admin/secrets calls setAdminUnlockToken(null) on unmount so the panel relocks. If retesting, use the mobile viewport 390x844 and testIDs: login-email/login-password/login-submit for auth; admin-unlock-password/admin-unlock-btn for the sudo gate; stripe-key-input/save-stripe-key/reset-stripe-key/reset-email/reset-password/reset-user-pw-btn/user-search inside the unlocked panel; menu-admin-secrets and menu-beta-tester on profile (admin-only). Full backend regression: pytest /app/backend/tests/ -v (multiple test files — iter-8 file covers new lockdown; iter-7 covers Google-removal regression; test_aiforge_backend.py + test_playstore_readiness.py + test_admin_password_reset.py + test_admin_stripe_key.py + test_referrals_and_checkout_status.py cover the rest). Bob's password is now bobnew123.",
+  "rca_of_issue": "N/A — no bugs found. All P0 items from the review request verified end-to-end at both backend (pytest against public preview URL) and frontend (Playwright at mobile viewport)."
+}

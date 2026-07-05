@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Alert,
+  Linking,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,10 +19,11 @@ import PulsingLogo from '@/src/components/Logo';
 import GradientButton from '@/src/components/GradientButton';
 import PressableScale from '@/src/components/PressableScale';
 import { colors, radius } from '@/src/theme/colors';
-import { Mail, Lock, Sparkles } from 'lucide-react-native';
+import { Mail, Lock } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const SUPPORT_EMAIL = 'jraycwalker@gmail.com';
 
 export default function Login() {
   const router = useRouter();
@@ -80,18 +82,19 @@ export default function Login() {
   const showRecovery = () => {
     Alert.alert(
       'Reset your password',
-      'No email server is needed. Sign in as the owner account below, then go to:\n\nProfile → Owner · App Secrets → Reset user password\n\nPick the locked-out email and issue a fresh password instantly.',
+      `Email us at ${SUPPORT_EMAIL} from your registered email address and a fresh password will be issued for your account right away.`,
       [
         {
-          text: 'Use demo / owner account',
-          onPress: () => doSignIn('demo@example.com', 'demo1234'),
+          text: 'Email support',
+          onPress: () =>
+            Linking.openURL(
+              `mailto:${SUPPORT_EMAIL}?subject=AiForge password reset&body=Please reset the password for my AiForge account: ${email.trim() || '(your account email)'}`,
+            ).catch(() => {}),
         },
         { text: 'OK' },
       ],
     );
   };
-
-  const onDemoLogin = () => doSignIn('demo@example.com', 'demo1234');
 
   return (
     <View style={styles.root}>
@@ -154,18 +157,6 @@ export default function Login() {
                 testID="login-submit"
                 style={{ marginTop: 18 }}
               />
-
-              <PressableScale
-                onPress={onDemoLogin}
-                style={{ marginTop: 10, alignSelf: 'center' }}
-                testID="demo-login"
-                disabled={loading}
-              >
-                <View style={styles.demoChip}>
-                  <Sparkles size={12} color={colors.green} />
-                  <Text style={styles.demoChipText}>Use demo account (one tap)</Text>
-                </View>
-              </PressableScale>
 
               <PressableScale
                 onPress={showRecovery}
@@ -232,18 +223,6 @@ const styles = StyleSheet.create({
   linkText: { color: colors.textDim, textAlign: 'center', fontSize: 13 },
   linkAccent: { color: colors.green, fontWeight: '700' },
   forgotText: { color: colors.cyan, fontSize: 12, fontWeight: '800', letterSpacing: 0.4, textDecorationLine: 'underline' },
-  demoChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.green + '14',
-    borderColor: colors.green + '55',
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: radius.pill,
-  },
-  demoChipText: { color: colors.green, fontSize: 12, fontWeight: '800' },
   footer: { alignItems: 'center' },
   footerText: { color: colors.textMuted, fontSize: 12, letterSpacing: 1 },
 });

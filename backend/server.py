@@ -7,7 +7,12 @@ live in `models.py`.
 from fastapi import APIRouter, FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
-from core import db, logger, mongo_client
+import os
+import uuid
+
+import bcrypt
+
+from core import ADMIN_EMAIL, db, iso, logger, make_referral_code, mongo_client, now_utc
 from routes import admin, assets, auth, avatar, checkout, editor, generation, legal, referrals
 
 app = FastAPI(title="AiForge API")
@@ -50,6 +55,54 @@ async def _safe_create_index(collection, keys, **opts):
         )
 
 
+async def _seed_admin():
+    """Idempotently guarantee the single owner/admin account exists.
+
+    - Creates the ADMIN_EMAIL account with ADMIN_PASSWORD on first boot in
+      any environment (local dev AND fresh production DBs).
+    - Never overwrites an existing password on restart.
+    - Strips stale `is_admin` flags from every other account (e.g. the old
+      demo owner) so exactly one admin exists.
+    """
+    if not ADMIN_EMAIL:
+        return
+    admin_password = os.environ.get("ADMIN_PASSWORD", "")
+    try:
+        existing = await db.users.find_one(
+            {"email": ADMIN_EMAIL}, {"_id": 0, "user_id": 1, "is_admin": 1}
+        )
+        if existing:
+            if not existing.get("is_admin"):
+                await db.users.update_one(
+                    {"email": ADMIN_EMAIL}, {"$set": {"is_admin": True}}
+                )
+        elif admin_password:
+            user_id = f"user_{uuid.uuid4().hex[:12]}"
+            await db.users.insert_one(
+                {
+                    "user_id": user_id,
+                    "email": ADMIN_EMAIL,
+                    "name": "Owner",
+                    "picture": None,
+                    "password_hash": bcrypt.hashpw(
+                        admin_password.encode(), bcrypt.gensalt()
+                    ).decode(),
+                    "plan": "singularity",
+                    "created_at": iso(now_utc()),
+                    "auth_provider": "email",
+                    "referral_code": make_referral_code(user_id),
+                    "is_admin": True,
+                }
+            )
+            logger.info(f"Seeded owner/admin account {ADMIN_EMAIL}")
+        await db.users.update_many(
+            {"is_admin": True, "email": {"$ne": ADMIN_EMAIL}},
+            {"$unset": {"is_admin": ""}},
+        )
+    except Exception as e:
+        logger.warning(f"Admin seed skipped: {type(e).__name__}: {str(e)[:160]}")
+
+
 @app.on_event("startup")
 async def on_startup():
     await _safe_create_index(db.users, "email", unique=True)
@@ -58,6 +111,7 @@ async def on_startup():
     await _safe_create_index(db.creations, "creation_id", unique=True)
     await _safe_create_index(db.usage, [("user_id", 1), ("day", 1)], unique=True)
     await _safe_create_index(db.payments, "session_id", unique=True)
+    await _seed_admin()
     logger.info("AiForge backend started")
 
 

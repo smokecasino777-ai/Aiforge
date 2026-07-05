@@ -4,6 +4,13 @@ const BASE = process.env.EXPO_PUBLIC_BACKEND_URL as string;
 const API = `${BASE}/api`;
 const TOKEN_KEY = 'aiforge_token';
 
+// Short-lived sudo token for the locked admin panel. Memory-only by design:
+// it never persists, so the panel relocks on every app launch.
+let adminUnlockToken: string | null = null;
+export function setAdminUnlockToken(t: string | null) {
+  adminUnlockToken = t;
+}
+
 export type User = {
   id: string;
   email: string;
@@ -50,6 +57,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(await authHeaders()),
+    ...(path.startsWith('/admin') && adminUnlockToken
+      ? { 'X-Admin-Unlock': adminUnlockToken }
+      : {}),
     ...(init.headers as Record<string, string> | undefined),
   };
   const res = await fetch(`${API}${path}`, { ...init, headers });
@@ -163,6 +173,12 @@ export const api = {
   // ---- Admin (owner-only) ----
   async adminMe() {
     return request<{ is_admin: boolean; email: string }>('/admin/me');
+  },
+  async adminUnlock(password: string) {
+    return request<{ sudo_token: string; expires_in_minutes: number }>('/admin/unlock', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
   },
   async adminGetStripeKey() {
     return request<{

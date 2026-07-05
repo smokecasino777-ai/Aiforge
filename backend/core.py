@@ -204,6 +204,9 @@ def make_referral_code(user_id: str) -> str:
 
 
 # ----- Admin helpers -----
+SUDO_EXP_MINUTES = 15
+
+
 def is_admin(user: dict) -> bool:
     if ADMIN_EMAIL and (user.get("email") or "").lower() == ADMIN_EMAIL:
         return True
@@ -213,17 +216,25 @@ def is_admin(user: dict) -> bool:
 async def ensure_admin(user: dict) -> dict:
     if is_admin(user):
         return user
-    # First-user fallback: auto-promote oldest user if no admin exists yet.
-    count_admins = await db.users.count_documents({"is_admin": True})
-    if count_admins == 0:
-        first = await db.users.find_one({}, sort=[("created_at", 1)])
-        if first and first.get("user_id") == user.get("user_id"):
-            await db.users.update_one(
-                {"user_id": user["user_id"]}, {"$set": {"is_admin": True}}
-            )
-            user["is_admin"] = True
-            return user
     raise HTTPException(status_code=403, detail="Admin access required")
+
+
+def make_sudo_token(user_id: str) -> str:
+    """Short-lived second-factor token for the sensitive admin panel."""
+    payload = {
+        "sub": user_id,
+        "sudo": True,
+        "exp": now_utc() + timedelta(minutes=SUDO_EXP_MINUTES),
+    }
+    return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
+
+
+def verify_sudo_token(token: str, user_id: str) -> bool:
+    try:
+        payload = pyjwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+        return bool(payload.get("sudo")) and payload.get("sub") == user_id
+    except Exception:
+        return False
 
 
 # ----- Stripe-key admin utilities -----

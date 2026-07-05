@@ -18,7 +18,7 @@ import StarryBackground from '@/src/components/StarryBackground';
 import GradientButton from '@/src/components/GradientButton';
 import PressableScale from '@/src/components/PressableScale';
 import { colors, radius } from '@/src/theme/colors';
-import { api } from '@/src/api/client';
+import { api, setAdminUnlockToken } from '@/src/api/client';
 
 type Status = {
   mode: string;
@@ -59,27 +59,58 @@ export default function AdminSecrets() {
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetSuccess, setResetSuccess] = useState<string | null>(null);
 
+  // ----- sudo unlock state (second factor for this panel) -----
+  const [unlocked, setUnlocked] = useState(false);
+  const [unlockPw, setUnlockPw] = useState('');
+  const [unlockReveal, setUnlockReveal] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
+  const [unlockError, setUnlockError] = useState<string | null>(null);
+
   useEffect(() => {
     (async () => {
       try {
         const me = await api.adminMe();
         setIsAdmin(me.is_admin);
-        if (me.is_admin) {
-          const s = await api.adminGetStripeKey();
-          setStatus(s);
-          try {
-            const u = await api.adminListUsers();
-            setUsers(u.users || []);
-          } catch {
-            /* silent — Stripe section still usable */
-          }
-        }
-      } catch (e: any) {
+      } catch {
         setIsAdmin(false);
       }
       setLoading(false);
     })();
+    // Relock when leaving the page — the sudo token never persists.
+    return () => setAdminUnlockToken(null);
   }, []);
+
+  const loadSecrets = async () => {
+    try {
+      const s = await api.adminGetStripeKey();
+      setStatus(s);
+      const u = await api.adminListUsers();
+      setUsers(u.users || []);
+    } catch {
+      /* silent — sections load lazily */
+    }
+  };
+
+  const onUnlock = async () => {
+    if (!unlockPw) {
+      setUnlockError('Enter your admin password.');
+      return;
+    }
+    setUnlocking(true);
+    setUnlockError(null);
+    try {
+      const r = await api.adminUnlock(unlockPw);
+      setAdminUnlockToken(r.sudo_token);
+      setUnlocked(true);
+      setUnlockPw('');
+      setUnlockReveal(false);
+      await loadSecrets();
+    } catch (e: any) {
+      setUnlockError(e?.message || 'Wrong admin password.');
+    } finally {
+      setUnlocking(false);
+    }
+  };
 
   const onSave = async () => {
     setError(null);
@@ -193,6 +224,72 @@ export default function AdminSecrets() {
             <Text style={styles.title}>Admin only</Text>
             <Text style={styles.subtitle}>You don’t have access to manage app secrets.</Text>
           </View>
+        </SafeAreaView>
+      </View>
+    );
+  }
+
+  if (isAdmin && !unlocked) {
+    return (
+      <View style={styles.root}>
+        <StarryBackground />
+        <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+            <View style={styles.topBar}>
+              <PressableScale onPress={() => router.back()} testID="back-btn">
+                <View style={styles.backBtn}><ArrowLeft size={18} color={colors.text} /><Text style={styles.backText}>Back</Text></View>
+              </PressableScale>
+              <View style={[styles.tag, { borderColor: colors.red + '88', backgroundColor: colors.red + '22' }]}>
+                <Text style={[styles.tagText, { color: colors.red }]}>LOCKED</Text>
+              </View>
+            </View>
+
+            <View style={[styles.center, { marginTop: 40, gap: 10 }]}>
+              <Lock size={44} color={colors.cyan} />
+              <Text style={styles.title}>Admin locked</Text>
+              <Text style={[styles.subtitle, { textAlign: 'center' }]}>
+                Re-enter your admin password to open App Secrets.{'\n'}
+                The panel relocks automatically after 15 minutes.
+              </Text>
+            </View>
+
+            <View style={styles.inputCard}>
+              <View style={styles.row}>
+                <KeyRound size={16} color={colors.cyan} />
+                <Text style={styles.inputLabel}>Admin password</Text>
+              </View>
+              <View style={styles.inputBox}>
+                <TextInput
+                  value={unlockPw}
+                  onChangeText={setUnlockPw}
+                  placeholder="Your admin password"
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.input}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  secureTextEntry={!unlockReveal}
+                  onSubmitEditing={onUnlock}
+                  testID="admin-unlock-password"
+                />
+                <PressableScale onPress={() => setUnlockReveal((v) => !v)}>
+                  <View style={styles.revealBtn}>
+                    {unlockReveal ? <EyeOff size={16} color={colors.textDim} /> : <Eye size={16} color={colors.textDim} />}
+                  </View>
+                </PressableScale>
+              </View>
+
+              {unlockError ? <Text style={styles.errText}>{unlockError}</Text> : null}
+
+              <GradientButton
+                title="Unlock admin panel"
+                onPress={onUnlock}
+                loading={unlocking}
+                testID="admin-unlock-btn"
+                style={{ marginTop: 12 }}
+              />
+            </View>
+          </ScrollView>
         </SafeAreaView>
       </View>
     );

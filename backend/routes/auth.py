@@ -33,15 +33,6 @@ async def register(req: RegisterRequest):
     email = req.email.lower().strip()
     existing = await db.users.find_one({"email": email}, {"_id": 0, "auth_provider": 1})
     if existing:
-        provider = existing.get("auth_provider") or "email"
-        if provider == "google":
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "This email is already registered via Google Sign-In. "
-                    "Please use the Google button on the login screen instead."
-                ),
-            )
         raise HTTPException(
             status_code=400,
             detail=(
@@ -94,15 +85,13 @@ async def login(req: LoginRequest):
             status_code=401,
             detail="No account with that email. Tap 'Create account' to sign up.",
         )
-    # Guide Google-auth users to the correct sign-in path
+    # Accounts created without a password (legacy social sign-ins)
     if not user.get("password_hash"):
-        provider = user.get("auth_provider") or "google"
         raise HTTPException(
             status_code=401,
             detail=(
-                f"This account uses {provider.title()} Sign-In. "
-                "Ask the app owner to set a password from Owner · App Secrets, "
-                "or sign in through the same provider you used originally."
+                "This account has no password set. "
+                "Contact the app owner to have a password issued for you."
             ),
         )
     if not bcrypt.checkpw(req.password.encode(), user["password_hash"].encode()):
