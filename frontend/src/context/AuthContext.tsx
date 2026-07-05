@@ -47,8 +47,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     (async () => {
-      await refresh();
-      setLoading(false);
+      try {
+        await refresh();
+      } catch {
+        // guarantee loading always resolves even if refresh crashes
+      } finally {
+        setLoading(false);
+      }
     })();
   }, [refresh]);
 

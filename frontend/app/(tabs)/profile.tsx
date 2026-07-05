@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Image, Alert, Platform, Share } fro
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { LogOut, Mail, Crown, BarChart2, Shield, Info, Gift, Share2, Copy, Trash2, KeyRound, UserCircle2 } from 'lucide-react-native';
+import { LogOut, Mail, Crown, BarChart2, Shield, Info, Gift, Share2, Copy, Trash2, KeyRound, UserCircle2, TestTube2 } from 'lucide-react-native';
 import StarryBackground from '@/src/components/StarryBackground';
 import GhostLogoBackground from '@/src/components/GhostLogoBackground';
 import GradientButton from '@/src/components/GradientButton';
@@ -244,6 +244,26 @@ export default function Profile() {
           </View>
 
           <View style={styles.menu}>
+            {isAdmin ? (
+              <PressableScale
+                onPress={async () => {
+                  const url = 'https://play.google.com/apps/testing/app.emergent.fierceforgeios2c75fc60';
+                  const msg = `Help me test AiForge on Android! Join the closed beta here:\n\n${url}\n\n1) Open the link on the same Google account you use on Android.\n2) Tap "Become a tester".\n3) Install AiForge from Play Store (may take 15 min to appear).`;
+                  try {
+                    await Share.share({ message: msg });
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+                testID="menu-beta-tester"
+              >
+                <MenuItem
+                  icon={<TestTube2 size={16} color={colors.cyan} />}
+                  label="Invite Beta Testers"
+                  sub="Share the Play Console tester link"
+                />
+              </PressableScale>
+            ) : null}
             <PressableScale onPress={() => router.push('/legal/privacy' as any)} testID="menu-privacy">
               <MenuItem icon={<Shield size={16} color={colors.cyan} />} label="Privacy Policy" sub="What data we collect & your rights" />
             </PressableScale>
