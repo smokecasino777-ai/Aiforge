@@ -8,6 +8,7 @@ import Animated, {
   withDelay,
   withRepeat,
   Easing,
+  ReduceMotion,
   runOnJS,
 } from 'react-native-reanimated';
 import Svg, { Defs, RadialGradient, Stop, Circle, G } from 'react-native-svg';
@@ -82,12 +83,14 @@ export default function AnimatedSplash({ onDone }: Props) {
       ),
     );
 
-    // Step 6: fade out + done
+    // Step 6: fade out + done — force ReduceMotion.Never so callback ALWAYS
+    // fires (Reanimated normally skips timing callbacks when the OS/browser
+    // reports prefers-reduced-motion, which would leave the splash forever).
     const finishMs = 1900;
     const fadeMs = 280;
     containerFade.value = withDelay(
       finishMs,
-      withTiming(0, { duration: fadeMs }, (finished) => {
+      withTiming(0, { duration: fadeMs, reduceMotion: ReduceMotion.Never }, (finished) => {
         if (finished) runOnJS(onDone)();
       }),
     );
@@ -123,7 +126,7 @@ export default function AnimatedSplash({ onDone }: Props) {
       <Pressable
         onPress={() => {
           // Cancel pending animations and finish immediately
-          containerFade.value = withTiming(0, { duration: 180 }, (finished) => {
+          containerFade.value = withTiming(0, { duration: 180, reduceMotion: ReduceMotion.Never }, (finished) => {
             if (finished) runOnJS(onDone)();
           });
         }}
