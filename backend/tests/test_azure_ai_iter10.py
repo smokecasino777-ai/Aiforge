@@ -122,7 +122,7 @@ class TestAzureText:
         d = r.json()
         assert d.get("status") == "ready"
         assert d.get("type") == "chat"
-        assert isinstance(d.get("creation_id"), str) and d["creation_id"].startswith("cr_")
+        assert isinstance(d.get("id"), str) and d["id"].startswith("cr_")
 
     def test_generate_scad(self, http, owner_token):
         r = http.post(
@@ -135,11 +135,13 @@ class TestAzureText:
         d = r.json()
         assert d.get("status") == "ready"
         assert d.get("type") == "model3d"
-        assert d.get("scad_code"), "scad_code missing"
-        # sanity — must look like OpenSCAD
-        code = d["scad_code"].lower()
+        # SCAD code is returned base64-encoded in media_data (CreationOut contract)
+        assert d.get("media_mime") == "application/x-openscad"
+        assert d.get("media_data"), "media_data (SCAD code) missing"
+        import base64 as _b64
+        code = _b64.b64decode(d["media_data"]).decode().lower()
         assert ("cube" in code or "difference" in code or "cylinder" in code), \
-            f"scad_code doesn't look like OpenSCAD: {d['scad_code'][:200]}"
+            f"decoded media_data doesn't look like OpenSCAD: {code[:200]}"
         # preview image is best-effort (image fallback)
         if d.get("preview_image"):
             print(f"[scad] preview_image present ({len(d['preview_image'])} b64 chars)")

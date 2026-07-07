@@ -72,10 +72,12 @@ async def _seed_admin():
             {"email": ADMIN_EMAIL}, {"_id": 0, "user_id": 1, "is_admin": 1}
         )
         if existing:
-            if not existing.get("is_admin"):
-                await db.users.update_one(
-                    {"email": ADMIN_EMAIL}, {"$set": {"is_admin": True}}
-                )
+            # Enforce owner privileges even if the row predates this seed
+            # (fixes owner stuck on 'free' plan and throttled at 5/day).
+            await db.users.update_one(
+                {"email": ADMIN_EMAIL},
+                {"$set": {"is_admin": True, "plan": "singularity"}},
+            )
         elif admin_password:
             user_id = f"user_{uuid.uuid4().hex[:12]}"
             await db.users.insert_one(

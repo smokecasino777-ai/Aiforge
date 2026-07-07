@@ -68,7 +68,7 @@ async def admin_me(user: dict = Depends(get_current_user)):
     """Lightweight check the frontend uses to decide whether to show admin UI."""
     try:
         await ensure_admin(user)
-        return {"is_admin": True, "email": user.get("email")}
+        return {"is_admin": True, "email": user.get("email"), "plan": user.get("plan")}
     except HTTPException:
         return {"is_admin": False, "email": user.get("email")}
 
