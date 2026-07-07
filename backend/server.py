@@ -12,7 +12,7 @@ import uuid
 
 import bcrypt
 
-from core import ADMIN_EMAIL, db, iso, logger, make_referral_code, mongo_client, now_utc
+from core import ADMIN_EMAIL, db, iso, logger, make_referral_code, mongo_client, now_utc, select_authorized_db
 from routes import admin, assets, auth, avatar, checkout, editor, generation, legal, referrals
 
 app = FastAPI(title="AiForge API")
@@ -105,6 +105,10 @@ async def _seed_admin():
 
 @app.on_event("startup")
 async def on_startup():
+    # Must run FIRST: points `db` at the database this Mongo user is actually
+    # authorized on (Atlas users in production are scoped to a single db that
+    # may not match the URI's default database).
+    await select_authorized_db()
     await _safe_create_index(db.users, "email", unique=True)
     await _safe_create_index(db.users, "user_id", unique=True)
     await _safe_create_index(db.creations, [("user_id", 1), ("created_at", -1)])

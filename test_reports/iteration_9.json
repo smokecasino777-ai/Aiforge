@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 9 (Emergent Atlas 'not authorized on fierce-forge' fix). NEW P0 UNIT TESTS: /app/backend/tests/test_db_failover_iter9.py — 5/5 pass in 0.29s. Covers: (a) 1st candidate 'fierce-forge' raises pymongo.errors.OperationFailure(code=13) with the exact production message, 2nd candidate 'aiforge' succeeds → core.db re-pointed to 'aiforge', find_one awaited on both in order, select_authorized_db does NOT raise; (b) ALL candidates unauthorized → keeps initial db 'fierce-forge' and does NOT raise (startup must not brick); (c) URI-default + DB_NAME both fail, but connectionStatus surfaces role-scoped db 'scoped_prod_db' → probed and wins (admin/local/config roles ignored as designed); (d) connectionStatus admin.command itself raising OperationFailure is swallowed and probe continues; (e) MongoProxy identity — `from core import db` grabbed at module load time SEES re-point via same wrapper object (imported_db is core.db, .name changes to the new target, __getattr__ and __getitem__ forward to the new underlying db). LOCAL STARTUP REGRESSION: /var/log/supervisor/backend.err.log shows 'Using MongoDB database aiforge' followed by 'AiForge backend started' with zero tracebacks after the core.py/server.py reloads; connectionStatus probe on local auth-less mongo runs (returns empty roles) without crashing. PUBLIC API REGRESSION (https://fierce-forge-ios.preview.emergentagent.com/api): re-ran the full iter-8 lockdown suite = 18/18 pass alongside the 5 new iter-9 tests → 23/23 total in 5.30s. Also ad-hoc: owner login 200 + /admin/me is_admin true; admin sudo lockdown (403 without X-Admin-Unlock → unlock → 200 → /admin/users 200); demo login 200 + is_admin false; new TEST_iter9_<uuid> register 200; /plans → 6; /creations with demo token → 200 (9 items); bob@example.com with the iter-8-rotated 'bobnew123' → 200. FRONTEND SMOKE: /login renders with login-email/login-password/login-submit testIDs — same shape as iter-8. Could NOT programmatically fire the demo login click on the RN-Web TextInput inside Playwright (both page.fill and JS-native-value-setter+input-event approaches did not trigger the app's onChange handler wired to controlled state, so the SIGN IN press was a no-op with empty state and no /api/auth/login request fired). This is a known limitation of Playwright vs React Native Web's TextInput event bridge, NOT a regression — iter-8 report noted the same env and worked around it. Real backend traffic in backend.out.log confirms demo login flows working from live users (multiple 200s on /api/auth/login + /api/admin/me + /api/creations from 10.231.128.196 during this test window). No new frontend testIDs or components were introduced by this iteration.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_db_failover_iter9.py",
+    "/app/backend/tests/test_admin_lockdown_iter8.py",
+    "/app/test_reports/pytest/pytest_iter9.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "core.py::select_authorized_db is correctly wired: candidates list is built in the exact requested order (URI default db → DB_NAME env → dbs from connectionStatus authenticatedUserRoles), admin/local/config role dbs are correctly excluded, and the probe uses the cheapest possible read (users.find_one with {_id:1} projection). Never raises — all exceptions caught with typed logging.",
+    "core.py::MongoProxy correctly preserves object identity across point_to(); __getattr__ uses object.__getattribute__ to avoid infinite recursion on the _db attribute. `from core import db` grabbed at import time sees future re-points — verified.",
+    "server.py::on_startup runs select_authorized_db() BEFORE _safe_create_index calls and _seed_admin, matching the P0 requirement. _safe_create_index catches OperationFailure (via broad except) so an unprivileged Atlas user gracefully skips index creation without bricking startup.",
+    "Small style nit (not a bug): logger is defined AFTER select_authorized_db in core.py (line 149 vs the function at line 108 which references logger). Works because the function body only runs later at startup, but re-ordering would be cleaner. Not action-required.",
+    "Emergent internal auth key + emergentintegrations dependency untouched, per constraints."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_db_failover_iter9.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (23/23 — 5 new iter-9 DB failover unit tests + 18 iter-8 admin/lockdown regression via public preview URL)",
+    "frontend": "N/A (skipped per review request 'testing_type: backend only'; login screen render verified, but demo login button press could not be automated on RN Web TextInput — see summary. No functional regressions observed.)"
+  },
+  "seed_data_creation": "One throwaway TEST_iter9_<uuid>@example.com registered (200) as part of the register smoke. No state changes to seeded accounts (owner/demo/alice/bob).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "iter-9 shipped ONE fix: production Atlas 'not authorized on fierce-forge' resolved by (1) MongoProxy in core.py exposing a stable `db` handle that can be re-pointed and (2) select_authorized_db() at server startup probing URI-default → DB_NAME env → connectionStatus role dbs with users.find_one and swallowing OperationFailure so index creation + admin seed run against an authorized db. To retest: pytest /app/backend/tests/test_db_failover_iter9.py -v (unit, 0.3s, no network) covers the failover contract with realistic mocks — the actual Atlas failure cannot be reproduced against local auth-less mongo. Local startup log check: sudo supervisorctl restart backend && sleep 3 && tail /var/log/supervisor/backend.err.log — expect 'Using MongoDB database aiforge' then 'AiForge backend started', no tracebacks. Public preview regression: EXPO_PUBLIC_BACKEND_URL=https://fierce-forge-ios.preview.emergentagent.com pytest /app/backend/tests/test_admin_lockdown_iter8.py — 18/18 pass. Credentials unchanged from iter-8: owner jraycwalker@gmail.com/KandiceJray1$, demo demo@example.com/demo1234, bob@example.com/bobnew123. If ever needed to visually test demo login on web, note Playwright's page.fill does NOT reliably trigger RN Web TextInput onChange — real device or Expo Go recommended.",
+  "rca_of_issue": "N/A — fix ships correctly. Original bug root cause (per main agent): AsyncIOMotorClient.get_default_database() returned the Atlas URI path db 'fierce-forge' but the scoped Atlas user only had roles on a different db, so createIndexes and find/insert on 'fierce-forge' returned OperationFailure code 13 during startup. Fix path (verified by these unit tests): MongoProxy allows stable `from core import db` imports; select_authorized_db() runs before index/seed and probes candidates in order with a cheap authorized-read check, catching OperationFailure per candidate and only using the first that succeeds. Idempotent, non-raising, and preserves proxy identity so already-imported db references in routes.* modules automatically pick up the correct database."
+}

@@ -61,22 +61,86 @@ def stripe_mode_of(key: str) -> str:
 
 
 # ----- DB -----
-# In Emergent production deployments the Atlas user is scoped to a specific
-# database whose name is embedded inside MONGO_URL itself (e.g. mongodb+srv://
-# user:pass@host/<dbname>?...). Hard-coding the DB name from DB_NAME causes
-# `OperationFailure: not authorized on <dbname> to execute command { find: … }`.
-# `get_default_database()` reads whatever DB is declared in the URI, which is
-# guaranteed to match the user's authorized scope. We fall back to DB_NAME for
-# local dev where the URI has no DB component (e.g. mongodb://localhost:27017).
+# Which database are we actually allowed to use? It differs by environment:
+#   • Local dev: mongodb://localhost:27017 (no URI db) + DB_NAME from .env.
+#   • Emergent production: Atlas URI whose path db (get_default_database())
+#     may NOT match the db the scoped Atlas user is authorized on — seen as
+#     `OperationFailure: not authorized on <db> to execute command { find … }`.
+# We therefore start from a best guess and, at startup, PROBE candidates
+# (URI default, DB_NAME env, and the dbs granted in the user's Mongo roles)
+# with a cheap `find`, then re-point to the first authorized one.
 mongo_client = AsyncIOMotorClient(MONGO_URL)
+
+
+class MongoProxy:
+    """Stable `db` handle for `from core import db` importers.
+
+    Forwards all attribute/collection access to the currently selected
+    database, and can be re-pointed once select_authorized_db() discovers
+    which database the connected Mongo user can actually read.
+    """
+
+    def __init__(self, initial):
+        object.__setattr__(self, "_db", initial)
+
+    def point_to(self, real_db) -> None:
+        object.__setattr__(self, "_db", real_db)
+
+    @property
+    def name(self) -> str:
+        return self._db.name
+
+    def __getattr__(self, item):
+        return getattr(object.__getattribute__(self, "_db"), item)
+
+    def __getitem__(self, item):
+        return object.__getattribute__(self, "_db")[item]
+
+
 try:
-    _default_db = mongo_client.get_default_database()
+    _uri_default_db = mongo_client.get_default_database()
 except Exception:
-    _default_db = None
-if _default_db is not None:
-    db = _default_db
-else:
-    db = mongo_client[DB_NAME]
+    _uri_default_db = None
+
+db = MongoProxy(_uri_default_db if _uri_default_db is not None else mongo_client[DB_NAME])
+
+
+async def select_authorized_db() -> None:
+    """Probe candidate databases and point `db` at the first authorized one.
+
+    Runs once at startup, BEFORE index creation and admin seeding. Candidates,
+    in order: the URI's default database, the DB_NAME env var, then any
+    database granted in the connected user's roles (via connectionStatus,
+    which any authenticated user may run). Never raises.
+    """
+    candidates: List[str] = []
+    if _uri_default_db is not None:
+        candidates.append(_uri_default_db.name)
+    if DB_NAME and DB_NAME not in candidates:
+        candidates.append(DB_NAME)
+    try:
+        status = await mongo_client.admin.command({"connectionStatus": 1})
+        roles = (status.get("authInfo") or {}).get("authenticatedUserRoles") or []
+        for role in roles:
+            role_db = role.get("db")
+            if role_db and role_db not in ("admin", "local", "config") and role_db not in candidates:
+                candidates.append(role_db)
+    except Exception as e:
+        logger.warning(f"connectionStatus probe failed: {type(e).__name__}: {str(e)[:120]}")
+
+    for name in candidates:
+        try:
+            await mongo_client[name].users.find_one({}, {"_id": 1})
+            db.point_to(mongo_client[name])
+            logger.info(f"Using MongoDB database '{name}'")
+            return
+        except Exception as e:
+            logger.warning(
+                f"DB candidate '{name}' not usable: {type(e).__name__}: {str(e)[:120]}"
+            )
+    logger.warning(
+        f"No authorized DB found among {candidates}; keeping '{db.name}'"
+    )
 
 logging.basicConfig(
     level=logging.INFO,
