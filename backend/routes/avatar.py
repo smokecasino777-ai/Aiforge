@@ -10,12 +10,11 @@ import base64
 import uuid
 from typing import Literal, Optional
 
-from emergentintegrations.llm.chat import LlmChat, UserMessage
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from ai_providers import generate_image
 from core import (
-    EMERGENT_LLM_KEY,
     PLAN_LIMITS,
     daily_used,
     db,
@@ -101,35 +100,18 @@ async def avatar_generate(
         raise HTTPException(
             status_code=400, detail=f"Unknown style. Allowed: {ALLOWED_STYLES}"
         )
-    prompt = template.format(desc=desc)
+    prompt = template.format(desc=desc) + (
+        " Centered subject, high quality, no text, no watermarks, "
+        "suitable as an app profile picture."
+    )
 
     try:
-        chat = (
-            LlmChat(
-                api_key=EMERGENT_LLM_KEY,
-                session_id=f"avatar-{uuid.uuid4().hex}",
-                system_message=(
-                    "You are an expert portrait artist generating high-quality 1:1 "
-                    "square avatars suitable for app profile pictures. Always center "
-                    "the subject. Never include text. Never include watermarks."
-                ),
-            )
-            .with_model("gemini", "gemini-3.1-flash-image-preview")
-            .with_params(modalities=["image", "text"])
-        )
-        _text, images = await chat.send_message_multimodal_response(
-            UserMessage(text=prompt)
-        )
+        img_b64, mime = await generate_image(prompt)
     except Exception as e:
         logger.exception("Avatar generation failed")
         raise HTTPException(
             status_code=502, detail=f"Avatar generation failed: {str(e)[:200]}"
         )
-    if not images:
-        raise HTTPException(status_code=502, detail="No image returned from model")
-    img = images[0]
-    img_b64 = img["data"]
-    mime = img.get("mime_type", "image/png")
 
     # Save into Library as an avatar-type creation
     creation_id = f"cr_{uuid.uuid4().hex[:14]}"

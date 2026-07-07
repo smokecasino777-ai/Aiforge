@@ -15,12 +15,11 @@ import base64
 import uuid
 from typing import Literal, Optional
 
-from emergentintegrations.llm.chat import ImageContent, LlmChat, UserMessage
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from ai_providers import edit_image, generate_text
 from core import (
-    EMERGENT_LLM_KEY,
     PLAN_LIMITS,
     daily_used,
     db,
@@ -78,31 +77,14 @@ async def _check_quota(user: dict) -> None:
 async def _edit_image(
     image_b64: str, instruction: str, system: Optional[str] = None
 ) -> tuple[str, str]:
-    """Run Nano Banana with the source image + instruction. Returns (b64, mime)."""
-    chat = (
-        LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"edit-{uuid.uuid4().hex}",
-            system_message=(
-                system
-                or "You are an expert image editor. Apply the requested transformation "
-                "while preserving the subject and composition. Output only the edited image."
-            ),
-        )
-        .with_model("gemini", "gemini-3.1-flash-image-preview")
-        .with_params(modalities=["image", "text"])
-    )
+    """Provider-backed image edit. Returns (b64, mime)."""
     try:
-        _text, images = await chat.send_message_multimodal_response(
-            UserMessage(text=instruction, file_contents=[ImageContent(image_b64)])
-        )
+        return await edit_image(image_b64, instruction, system)
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.exception("Nano Banana edit failed")
+        logger.exception("Image edit failed")
         raise HTTPException(status_code=502, detail=f"Edit failed: {str(e)[:200]}")
-    if not images:
-        raise HTTPException(status_code=502, detail="No image returned from model")
-    img = images[0]
-    return img["data"], img.get("mime_type", "image/png")
 
 
 STYLE_PROMPTS = {
@@ -212,19 +194,13 @@ async def editor_caption(req: CaptionRequest, user: dict = Depends(get_current_u
         "No prose, no markdown, no backticks."
     )
     try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"cap-{uuid.uuid4().hex}",
-            system_message=sys,
-        ).with_model("anthropic", "claude-sonnet-4-6")
-        out = await chat.send_message(
-            UserMessage(
-                text=(
-                    f"Media type: {media_kind}\n"
-                    f"Title: {(req.title or '').strip()}\n"
-                    f"Creator prompt: {req.prompt.strip()}\n\nReturn JSON only."
-                )
-            )
+        out = await generate_text(
+            system=sys,
+            prompt=(
+                f"Media type: {media_kind}\n"
+                f"Title: {(req.title or '').strip()}\n"
+                f"Creator prompt: {req.prompt.strip()}\n\nReturn JSON only."
+            ),
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Caption AI failed: {str(e)[:200]}")

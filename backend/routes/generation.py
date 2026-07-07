@@ -1,17 +1,14 @@
 """AI generation: image, video, model3d, chat (single-shot + multi-turn),
 SCAD code generation, and the creations CRUD.
 """
-import asyncio
 import base64
 import uuid
 from typing import List, Optional
 
-from emergentintegrations.llm.chat import LlmChat, UserMessage
-from emergentintegrations.llm.openai.video_generation import OpenAIVideoGeneration
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
+from ai_providers import generate_image, generate_text, generate_video
 from core import (
-    EMERGENT_LLM_KEY,
     PLAN_LIMITS,
     daily_used,
     db,
@@ -35,43 +32,12 @@ async def _generate_image_sync(prompt: str, style_3d: bool = False) -> tuple[str
             f"Isometric 3D render, octane render, studio lighting, ultra detailed 3D model of: {prompt}. "
             f"Solid object on neutral background, photorealistic 3D, sharp details."
         )
-    chat = (
-        LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"gen-{uuid.uuid4().hex}",
-            system_message="You are an AI artist generating high-quality images.",
-        )
-        .with_model("gemini", "gemini-3.1-flash-image-preview")
-        .with_params(modalities=["image", "text"])
-    )
-    msg = UserMessage(text=final_prompt)
-    _text, images = await chat.send_message_multimodal_response(msg)
-    if not images:
-        raise RuntimeError("No image returned")
-    img = images[0]
-    return img["data"], img.get("mime_type", "image/png")
-
-
-def _generate_video_blocking(prompt: str, duration: int, size: str) -> tuple[bytes, str]:
-    gen = OpenAIVideoGeneration(api_key=EMERGENT_LLM_KEY)
-    video_bytes = gen.text_to_video(
-        prompt=prompt,
-        model="sora-2",
-        size=size if size in OpenAIVideoGeneration.SIZES else "1280x720",
-        duration=duration if duration in OpenAIVideoGeneration.DURATIONS else 4,
-        max_wait_time=600,
-    )
-    if not video_bytes:
-        raise RuntimeError("No video returned")
-    return video_bytes, "video/mp4"
+    return await generate_image(final_prompt)
 
 
 async def _process_video_job(creation_id: str, prompt: str, duration: int, size: str):
     try:
-        loop = asyncio.get_event_loop()
-        video_bytes, mime = await loop.run_in_executor(
-            None, _generate_video_blocking, prompt, duration, size
-        )
+        video_bytes, mime = await generate_video(prompt, duration, size)
         b64 = base64.b64encode(video_bytes).decode()
         await db.creations.update_one(
             {"creation_id": creation_id},
@@ -166,15 +132,13 @@ async def generate(
 
     if req.type == "chat":
         try:
-            chat = LlmChat(
-                api_key=EMERGENT_LLM_KEY,
-                session_id=f"chat-{user['user_id']}",
-                system_message=(
+            reply = await generate_text(
+                system=(
                     "You are AiForge Assistant, a helpful AI creative partner. "
                     "Help users brainstorm prompts for images, videos and 3D models."
                 ),
-            ).with_model("anthropic", "claude-sonnet-4-6")
-            reply = await chat.send_message(UserMessage(text=req.prompt))
+                prompt=req.prompt,
+            )
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"Chat failed: {str(e)[:200]}")
         base_doc.update(
@@ -213,16 +177,12 @@ async def chat_endpoint(req: ChatRequest, user: dict = Depends(get_current_user)
     history = history[-30:]
 
     try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=session_id,
-            system_message=(
-                "You are AiForge Assistant, an energetic creative AI co-pilot. "
-                "You help users craft amazing prompts, brainstorm ideas, and answer questions about "
-                "image, video and 3D AI generation. Be concise, vivid and helpful. "
-                "Stay in character and remember context from earlier in the conversation."
-            ),
-        ).with_model("anthropic", "claude-sonnet-4-6")
+        system = (
+            "You are AiForge Assistant, an energetic creative AI co-pilot. "
+            "You help users craft amazing prompts, brainstorm ideas, and answer questions about "
+            "image, video and 3D AI generation. Be concise, vivid and helpful. "
+            "Stay in character and remember context from earlier in the conversation."
+        )
 
         prior_pairs: List[tuple[str, str]] = []
         i = 0
@@ -238,9 +198,9 @@ async def chat_endpoint(req: ChatRequest, user: dict = Depends(get_current_user)
             for u, a in prior_pairs:
                 primer += f"User: {u}\nAssistant: {a}\n\n"
             primer += f"User: {req.prompt}\n\nReply to the latest user message above, keeping prior context."
-            reply = await chat.send_message(UserMessage(text=primer))
+            reply = await generate_text(system, primer)
         else:
-            reply = await chat.send_message(UserMessage(text=req.prompt))
+            reply = await generate_text(system, req.prompt)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Chat failed: {str(e)[:200]}")
 
@@ -276,17 +236,13 @@ async def generate_scad(req: ScadRequest, user: dict = Depends(get_current_user)
             status_code=402, detail=f"Daily limit reached ({limit}). Upgrade your plan."
         )
     try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"scad-{uuid.uuid4().hex}",
-            system_message=(
+        code = await generate_text(
+            system=(
                 "You are an OpenSCAD code expert. Given a description, return ONLY valid OpenSCAD code "
                 "(no markdown fences, no explanations). Use parameters and modules. Output should be ready "
                 "to render with openscad CLI to produce STL."
             ),
-        ).with_model("anthropic", "claude-sonnet-4-6")
-        code = await chat.send_message(
-            UserMessage(text=f"Generate OpenSCAD code for: {req.prompt}")
+            prompt=f"Generate OpenSCAD code for: {req.prompt}",
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"SCAD generation failed: {str(e)[:200]}")

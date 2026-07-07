@@ -93,3 +93,9 @@ See `/app/memory/test_credentials.md`.
 - Production logs showed `not authorized on fierce-forge` for all DB ops: the Atlas user is not authorized on the URI's default database.
 - core.py `db` is now a MongoProxy; startup runs select_authorized_db() FIRST — probes [URI default db, DB_NAME env, dbs from connectionStatus roles] with a cheap find and re-points db to the first authorized one. Never raises.
 - Proven by mock unit tests (tests/test_db_failover_iter9.py, 5/5) reproducing the exact production failure + 23/23 API regression. Requires re-Publish to take effect in production.
+
+## Update (2026-06) — Azure AI Foundry migration (iteration 10)
+- New backend/ai_providers.py: single provider layer for all AI calls.
+- TEXT (assistant chat, SCAD codegen, captions) → customer's Azure gpt-4o deployment (AZURE_API_KEY/AZURE_OPENAI_BASE/AZURE_DEPLOYMENT in backend/.env, verified working).
+- IMAGE/VIDEO → Azure gpt-image-1 / sora when AZURE_IMAGE_DEPLOYMENT / AZURE_VIDEO_DEPLOYMENT env are set (deployments do NOT exist yet on the customer's resource); until then falls back to Emergent key (Nano Banana / sora-2) so nothing breaks for launch.
+- Customer's old Azure key was invalid (401); replaced with working 84-char key.
