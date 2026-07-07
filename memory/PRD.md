@@ -88,3 +88,8 @@ See `/app/memory/test_credentials.md`.
 - NEW sudo mode: Admin Secrets page requires re-entering admin password (POST /api/admin/unlock → 15-min sudo JWT sent as X-Admin-Unlock). All sensitive admin endpoints 403 without it.
 - Customer password recovery: "Forgot password?" → email the owner (mailto), owner resets via unlocked admin panel.
 - Verified: testing iteration_8 (18/18 backend + full frontend flows) PASS; deployment_agent PASS.
+
+## Update (2026-06) — Production Atlas DB authorization fix (iteration 9)
+- Production logs showed `not authorized on fierce-forge` for all DB ops: the Atlas user is not authorized on the URI's default database.
+- core.py `db` is now a MongoProxy; startup runs select_authorized_db() FIRST — probes [URI default db, DB_NAME env, dbs from connectionStatus roles] with a cheap find and re-points db to the first authorized one. Never raises.
+- Proven by mock unit tests (tests/test_db_failover_iter9.py, 5/5) reproducing the exact production failure + 23/23 API regression. Requires re-Publish to take effect in production.
