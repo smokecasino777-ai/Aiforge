@@ -19,6 +19,7 @@ import PressableScale from '@/src/components/PressableScale';
 import { colors, radius } from '@/src/theme/colors';
 import { Mail, Lock, User, Gift } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { startGoogleSignIn } from '@/src/utils/googleAuth';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -90,6 +91,25 @@ export default function Register() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const onGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    try {
+      const sid = await startGoogleSignIn();
+      if (sid) {
+        await signInWithGoogleSession(sid);
+        router.replace('/(tabs)');
+      }
+    } catch (e: any) {
+      Alert.alert(
+        'Google sign-in failed',
+        e?.message || 'Could not complete Google sign-in. Please try again.',
+      );
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -169,6 +189,27 @@ export default function Register() {
                 style={{ marginTop: 18 }}
               />
 
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>OR</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              <PressableScale
+                onPress={onGoogleSignIn}
+                disabled={googleLoading || loading}
+                testID="register-google"
+              >
+                <View style={styles.googleBtn}>
+                  <View style={styles.googleBadge}>
+                    <Text style={styles.googleBadgeText}>G</Text>
+                  </View>
+                  <Text style={styles.googleBtnText}>
+                    {googleLoading ? 'Opening Google…' : 'Continue with Google'}
+                  </Text>
+                </View>
+              </PressableScale>
+
               <PressableScale onPress={() => router.back()} style={{ marginTop: 22 }}>
                 <Text style={styles.linkText} testID="goto-login">
                   Already have an account? <Text style={styles.linkAccent}>Sign in</Text>
@@ -211,4 +252,29 @@ const styles = StyleSheet.create({
   input: { flex: 1, color: colors.text, fontSize: 15 },
   linkText: { color: colors.textDim, textAlign: 'center', fontSize: 13 },
   linkAccent: { color: colors.cyan, fontWeight: '700' },
+  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16, marginBottom: 4 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { color: colors.textMuted, fontSize: 11, letterSpacing: 2, fontWeight: '700' },
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#141420',
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    height: 52,
+    paddingHorizontal: 18,
+  },
+  googleBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleBadgeText: { color: '#4285F4', fontSize: 14, fontWeight: '900' },
+  googleBtnText: { color: colors.text, fontSize: 15, fontWeight: '700' },
 });

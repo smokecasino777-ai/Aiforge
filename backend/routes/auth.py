@@ -85,13 +85,14 @@ async def login(req: LoginRequest):
             status_code=401,
             detail="No account with that email. Tap 'Create account' to sign up.",
         )
-    # Accounts created without a password (legacy social sign-ins)
+    # Accounts created via Google sign-in have no password
     if not user.get("password_hash"):
         raise HTTPException(
             status_code=401,
             detail=(
-                "This account has no password set. "
-                "Contact the app owner to have a password issued for you."
+                "This account uses Google Sign-In. "
+                "Tap 'Continue with Google' on the login screen, "
+                "or contact the app owner to have a password issued."
             ),
         )
     if not bcrypt.checkpw(req.password.encode(), user["password_hash"].encode()):
@@ -129,6 +130,7 @@ async def google_auth(req: GoogleSessionRequest):
             "plan": "free",
             "created_at": iso(now_utc()),
             "auth_provider": "google",
+            "referral_code": make_referral_code(user_id),
         }
         await db.users.insert_one(user)
     token = make_token(user["user_id"])

@@ -1,0 +1,51 @@
+{
+  "summary": "Iteration 11 — Google Sign-In integration tested (backend + frontend). Backend: 11/11 pytest passing — /api/auth/google returns 401 'Invalid Google session' for bogus session_id and 422 for missing session_id; email/password login regression intact for demo and owner; admin lockdown holds (403 without X-Admin-Unlock); owner has is_admin=true and plan=singularity; /api/plans returns 6; duplicate register → 400; Azure /api/chat smoke → 200. Frontend: /login and /register both render without any crash (regression P0 clean); email/password sign-in with demo@example.com works and session persists on reload; Google button on /login triggers a full-page redirect to https://auth.emergentagent.com/?redirect=<app-origin>/ (verified — chain proceeded through Emergent portal → Google's accounts.google.com with correct redirect_uri to demobackend.emergentagent.com); GoogleSessionCatcher safely no-ops on /login#session_id=fake-sid — exchange fails silently, hash is cleaned via replaceState, user stays on login screen. ONE BUG FOUND: register.tsx calls signInWithGoogleSession(sid) but the function is not destructured from useAuth() — will throw ReferenceError on native mobile when a session_id is returned from openAuthSessionAsync. Web is unaffected (sid is null there because web uses full-page redirect). Deprecated warning noted (harmless): 'props.pointerEvents is deprecated'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "register.tsx onGoogleSignIn",
+        "issue": "Uses signInWithGoogleSession(sid) at line 103 but only destructures { signUp } from useAuth() at line 29. On native mobile, if the Google flow returns a session_id, this will throw ReferenceError and Alert 'Google sign-in failed'. Web is unaffected because startGoogleSignIn returns null (full-page redirect flow) and the handler in _layout.tsx (GoogleSessionCatcher) does the exchange instead. Fix: change line 29 to `const { signUp, signInWithGoogleSession } = useAuth();`. Reference: /app/frontend/app/(auth)/register.tsx:29 and :103",
+        "testID": "register-google",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {
+        "component": "PressableScale (used for google-signin & register-google)",
+        "issue": "React-Native-Web renders the Pressable with pointerEvents as a prop, triggering console warning 'props.pointerEvents is deprecated. Use style.pointerEvents'. Non-blocking but should be migrated when the underlying component is updated. Reference: seen on /login page load."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_google_auth_iter11.py",
+    "/app/test_reports/pytest/pytest_iter11.xml"
+  ],
+  "action_items": [
+    "Fix register.tsx: destructure signInWithGoogleSession from useAuth (line 29). Change `const { signUp } = useAuth();` → `const { signUp, signInWithGoogleSession } = useAuth();`. Otherwise native mobile Google sign-in from the register screen will ReferenceError.",
+    "(Optional) Migrate PressableScale's pointerEvents from prop to style to silence RN-Web deprecation warning."
+  ],
+  "critical_code_review_comments": [
+    "googleAuth.ts: clean implementation, playbook-conformant (auth.emergentagent.com/?redirect=<app_origin>/ on web, WebBrowser.openAuthSessionAsync + Linking.createURL('login') on native). extractSessionId handles both # and ? forms.",
+    "_layout.tsx GoogleSessionCatcher: correctly uses a processedRef Set to avoid double-exchange, cleans URL via replaceState after processing, and silently swallows errors so users can retry. Web branch skips native Linking listener setup — good.",
+    "backend routes/auth.py: /auth/google idempotent-upserts by email, sets auth_provider='google', now issues referral_code — consistent with the email register path. The login route's error message for password-less accounts correctly points at the Google button. No _id leak (projections use {_id: 0}).",
+    "register.tsx has the missing-destructure bug called out above (only real defect)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_google_auth_iter11.py (new — 11 tests)"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "83% (5/6 verified flows OK; native Google-from-register path has a ReferenceError bug not testable in web preview but confirmed by code inspection)"
+  },
+  "seed_data_creation": "One throwaway user created via /api/auth/register for regression coverage (email pattern test_iter11_*@example.com). No admin data touched.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Google OAuth cannot be completed end-to-end by automation (real Google login). Verify only the handoff (redirect URL contains auth.emergentagent.com and redirect param equals app origin) and the fake-session_id safety path. Backend /api/auth/google returns 401 for bogus session ids and 422 for missing session_id — both covered by test_google_auth_iter11.py. Email lowercasing on register means don't uppercase test emails in assertions.",
+  "rca_of_issue": "Bug: register.tsx onGoogleSignIn ReferenceError. RCA — during the Google button copy-paste from login.tsx, the destructure `const { signIn, signInWithGoogleSession } = useAuth();` was reduced to `const { signUp } = useAuth();` (register only needs signUp) but the onGoogleSignIn handler still references signInWithGoogleSession from the login version. Reproduction (native only): open registration screen on Android/iOS → tap 'Continue with Google' → complete Google OAuth → WebBrowser returns to app with session_id → onGoogleSignIn extracts sid → tries `await signInWithGoogleSession(sid)` → ReferenceError → Alert 'Google sign-in failed'. Mitigation: add signInWithGoogleSession to the destructure at line 29. Web is unaffected because startGoogleSignIn() does window.location.href = ... and returns null before that line runs, and the returning session_id is caught by _layout.tsx GoogleSessionCatcher which correctly uses useAuth().signInWithGoogleSession."
+}
