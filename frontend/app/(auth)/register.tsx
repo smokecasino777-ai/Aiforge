@@ -26,7 +26,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export default function Register() {
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string }>();
-  const { signUp } = useAuth();
+  const { signUp, signInWithGoogleSession } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

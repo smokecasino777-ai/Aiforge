@@ -99,3 +99,8 @@ See `/app/memory/test_credentials.md`.
 - TEXT (assistant chat, SCAD codegen, captions) → customer's Azure gpt-4o deployment (AZURE_API_KEY/AZURE_OPENAI_BASE/AZURE_DEPLOYMENT in backend/.env, verified working).
 - IMAGE/VIDEO → Azure gpt-image-1 / sora when AZURE_IMAGE_DEPLOYMENT / AZURE_VIDEO_DEPLOYMENT env are set (deployments do NOT exist yet on the customer's resource); until then falls back to Emergent key (Nano Banana / sora-2) so nothing breaks for launch.
 - Customer's old Azure key was invalid (401); replaced with working 84-char key.
+
+## Update (2026-06) — Google Sign-In re-added (iteration 11)
+- Emergent-managed Google Auth: 'Continue with Google' buttons on login + register (Text 'G' badge, no icon imports — previous Chrome-icon crash cause eliminated).
+- src/utils/googleAuth.ts (web full-page redirect / native openAuthSessionAsync with aiforge://login deep link), GoogleSessionCatcher in _layout.tsx, api.googleAuth → POST /api/auth/google (exchanges session_id, upserts user, returns app JWT; Google users get referral_code).
+- Email/password login coexists untouched. Tested: 11/11 backend + full frontend regression PASS (iteration_11); register.tsx missing-destructure bug found by testing agent and fixed.
