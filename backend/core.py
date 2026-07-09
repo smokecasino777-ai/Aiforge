@@ -114,10 +114,12 @@ async def select_authorized_db() -> None:
     which any authenticated user may run). Never raises.
     """
     candidates: List[str] = []
-    if _uri_default_db is not None:
-        candidates.append(_uri_default_db.name)
-    if DB_NAME and DB_NAME not in candidates:
+    # DB_NAME first: in Emergent production the injected DB_NAME is the db the
+    # scoped Atlas user is authorized on, so probing it first keeps logs clean.
+    if DB_NAME:
         candidates.append(DB_NAME)
+    if _uri_default_db is not None and _uri_default_db.name not in candidates:
+        candidates.append(_uri_default_db.name)
     try:
         status = await mongo_client.admin.command({"connectionStatus": 1})
         roles = (status.get("authInfo") or {}).get("authenticatedUserRoles") or []

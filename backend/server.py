@@ -19,6 +19,12 @@ app = FastAPI(title="AiForge API")
 api = APIRouter(prefix="/api")
 
 
+@app.get("/")
+async def root_health():
+    """Deployment/LB health probes hit the bare root path — must return 200."""
+    return {"status": "ok", "service": "AiForge API"}
+
+
 # ----- Health -----
 @api.get("/")
 async def root():
