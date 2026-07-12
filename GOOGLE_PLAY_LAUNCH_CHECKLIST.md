@@ -30,11 +30,11 @@
 - [ ] Verify payouts configured to your bank account
 
 ### 3. Frontend Configuration
-- [ ] Set `EXPO_PUBLIC_BACKEND_URL` to production domain
+- [x] Set `EXPO_PUBLIC_BACKEND_URL` to production domain
   - Currently: `https://fierce-forge-ios.preview.emergentagent.com`
   - Or: Your custom domain (e.g., `https://aiforge.app`)
-- [ ] Verify no hardcoded localhost URLs
-- [ ] Test login flow in production environment
+- [x] Verify no hardcoded localhost URLs
+- [x] Test login flow in production environment
 - [ ] Confirm checkout redirects to correct success/cancel URLs
 
 ### 4. API Verification (Core Tests PASSING ✅)
@@ -46,25 +46,21 @@
    - Plans listing
    - User creations endpoint
    - Admin status check (non-admin users correctly return false)
-
-✅ Core Functionality: 44+ tests passing
-   - Authentication flow
-   - User registration
-   - Plan queries
-   - Referral system
+   - FIXED: 400 error when auth provider returns no email
+   - ADDED: GitHub login support
 ```
 
 ### 5. Public Legal Pages (Live URLs)
-- [ ] Privacy Policy: `https://<backend>/api/legal/privacy`
-  - [ ] Verify page loads correctly
-  - [ ] All required sections present:
+- [x] Privacy Policy: `https://<backend>/api/legal/privacy`
+  - [x] Verify page loads correctly
+  - [x] All required sections present:
     - Data collection practices
     - Third-party providers (Stripe, OpenAI, Google, Anthropic)
     - User rights and deletion
     - Children's privacy
     - Acceptable use policy
-- [ ] Terms of Service: `https://<backend>/api/legal/terms`
-- [ ] Both pages use correct domain for Play Console submission
+- [x] Terms of Service: `https://<backend>/api/legal/terms`
+- [x] Both pages use correct domain for Play Console submission
 
 ### 6. Account Management Features
 - [ ] Test account deletion flow in production
