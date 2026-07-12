@@ -18,8 +18,8 @@ SplashScreen.preventAutoHideAsync();
  * web = URL hash on mount; native = cold-start URL or hot deep link.
  * Exchanges it for our JWT, then routes into the app.
  */
-function GoogleSessionCatcher() {
-  const { signInWithGoogleSession } = useAuth();
+function OAuthSessionCatcher() {
+  const { signInWithOAuth } = useAuth();
   const router = useRouter();
   const processedRef = useRef<Set<string>>(new Set());
 
@@ -28,7 +28,7 @@ function GoogleSessionCatcher() {
     if (!sid || processedRef.current.has(sid)) return;
     processedRef.current.add(sid);
     try {
-      await signInWithGoogleSession(sid);
+      await signInWithOAuth(sid);
       router.replace('/(tabs)');
     } catch {
       // silent — user stays on the current screen and can retry
@@ -78,7 +78,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#020208' }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <GoogleSessionCatcher />
+          <OAuthSessionCatcher />
           <StatusBar style="light" />
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#020208' } }}>
             <Stack.Screen name="index" />

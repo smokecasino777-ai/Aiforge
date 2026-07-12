@@ -22,23 +22,41 @@ export function extractSessionId(url?: string | null): string | null {
 }
 
 /**
- * Starts Google sign-in.
+ * Starts an OAuth sign-in flow (Google, GitHub, etc.) via the Emergent portal.
  * Returns the session_id on mobile success, or null when the flow completes
  * elsewhere (web full-page redirect) or the user cancelled.
  */
-export async function startGoogleSignIn(): Promise<string | null> {
+async function startOAuthSignIn(provider?: 'google' | 'github'): Promise<string | null> {
+  const providerParam = provider ? `&provider=${provider}` : '';
+
   if (Platform.OS === 'web') {
     const redirectUrl = window.location.origin + '/';
-    window.location.href = `${AUTH_PORTAL}?redirect=${encodeURIComponent(redirectUrl)}`;
+    window.location.href = `${AUTH_PORTAL}?redirect=${encodeURIComponent(redirectUrl)}${providerParam}`;
     return null;
   }
+
   // 'login' is a real route (app/(auth)/login.tsx → /login) so cold-start
   // deep links (aiforge://login#session_id=...) land somewhere valid.
   const redirectUrl = Linking.createURL('login');
-  const authUrl = `${AUTH_PORTAL}?redirect=${encodeURIComponent(redirectUrl)}`;
+  const authUrl = `${AUTH_PORTAL}?redirect=${encodeURIComponent(redirectUrl)}${providerParam}`;
+
   const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
   if (result.type === 'success' && 'url' in result && result.url) {
     return extractSessionId(result.url);
   }
   return null;
+}
+
+/**
+ * Starts Google sign-in.
+ */
+export async function startGoogleSignIn(): Promise<string | null> {
+  return startOAuthSignIn('google');
+}
+
+/**
+ * Starts GitHub sign-in.
+ */
+export async function startGitHubSignIn(): Promise<string | null> {
+  return startOAuthSignIn('github');
 }

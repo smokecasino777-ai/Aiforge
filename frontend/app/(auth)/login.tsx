@@ -19,9 +19,9 @@ import PulsingLogo from '@/src/components/Logo';
 import GradientButton from '@/src/components/GradientButton';
 import PressableScale from '@/src/components/PressableScale';
 import { colors, radius } from '@/src/theme/colors';
-import { Mail, Lock } from 'lucide-react-native';
+import { Mail, Lock, Github } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { startGoogleSignIn } from '@/src/utils/googleAuth';
+import { startGoogleSignIn, startGitHubSignIn } from '@/src/utils/googleAuth';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SUPPORT_EMAIL = 'jraycwalker@gmail.com';
@@ -29,7 +29,7 @@ const SUPPORT_EMAIL = 'jraycwalker@gmail.com';
 export default function Login() {
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string }>();
-  const { signIn, signInWithGoogleSession } = useAuth();
+  const { signIn, signInWithOAuth } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -98,14 +98,14 @@ export default function Login() {
   };
 
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [githubLoading, setGithubLoading] = useState(false);
+
   const onGoogleSignIn = async () => {
     setGoogleLoading(true);
     try {
       const sid = await startGoogleSignIn();
-      // Web triggers a full-page redirect and returns null (handled by the
-      // GoogleSessionCatcher on remount). Mobile returns the sid directly.
       if (sid) {
-        await signInWithGoogleSession(sid);
+        await signInWithOAuth(sid);
         router.replace('/(tabs)');
       }
     } catch (e: any) {
@@ -115,6 +115,24 @@ export default function Login() {
       );
     } finally {
       setGoogleLoading(false);
+    }
+  };
+
+  const onGitHubSignIn = async () => {
+    setGithubLoading(true);
+    try {
+      const sid = await startGitHubSignIn();
+      if (sid) {
+        await signInWithOAuth(sid); // We reuse this as it just sends the SID to backend
+        router.replace('/(tabs)');
+      }
+    } catch (e: any) {
+      Alert.alert(
+        'GitHub sign-in failed',
+        e?.message || 'Could not complete GitHub sign-in. Please try again.',
+      );
+    } finally {
+      setGithubLoading(false);
     }
   };
 
@@ -186,20 +204,37 @@ export default function Login() {
                 <View style={styles.dividerLine} />
               </View>
 
-              <PressableScale
-                onPress={onGoogleSignIn}
-                disabled={googleLoading || loading}
-                testID="google-signin"
-              >
-                <View style={styles.googleBtn}>
-                  <View style={styles.googleBadge}>
-                    <Text style={styles.googleBadgeText}>G</Text>
+              <View style={styles.socialRow}>
+                <PressableScale
+                  onPress={onGoogleSignIn}
+                  disabled={googleLoading || githubLoading || loading}
+                  testID="google-signin"
+                  style={{ flex: 1 }}
+                >
+                  <View style={styles.socialBtn}>
+                    <View style={styles.googleBadge}>
+                      <Text style={styles.googleBadgeText}>G</Text>
+                    </View>
+                    <Text style={styles.socialBtnText}>
+                      {googleLoading ? 'Wait…' : 'Google'}
+                    </Text>
                   </View>
-                  <Text style={styles.googleBtnText}>
-                    {googleLoading ? 'Opening Google…' : 'Continue with Google'}
-                  </Text>
-                </View>
-              </PressableScale>
+                </PressableScale>
+
+                <PressableScale
+                  onPress={onGitHubSignIn}
+                  disabled={googleLoading || githubLoading || loading}
+                  testID="github-signin"
+                  style={{ flex: 1 }}
+                >
+                  <View style={styles.socialBtn}>
+                    <Github size={20} color={colors.text} />
+                    <Text style={styles.socialBtnText}>
+                      {githubLoading ? 'Wait…' : 'GitHub'}
+                    </Text>
+                  </View>
+                </PressableScale>
+              </View>
 
               <PressableScale
                 onPress={showRecovery}
@@ -282,15 +317,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   googleBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  googleBadgeText: { color: '#4285F4', fontSize: 14, fontWeight: '900' },
-  googleBtnText: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  googleBadgeText: { color: '#4285F4', fontSize: 12, fontWeight: '900' },
+  socialRow: { flexDirection: 'row', gap: 12, marginTop: 4 },
+  socialBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#141420',
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    height: 52,
+  },
+  socialBtnText: { color: colors.text, fontSize: 15, fontWeight: '700' },
   footer: { alignItems: 'center' },
   footerText: { color: colors.textMuted, fontSize: 12, letterSpacing: 1 },
 });

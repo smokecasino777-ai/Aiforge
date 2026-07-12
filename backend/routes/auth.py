@@ -106,30 +106,43 @@ async def login(req: LoginRequest):
 
 @router.post("/auth/google", response_model=AuthResponse)
 async def google_auth(req: GoogleSessionRequest):
-    """Exchange Emergent session_id for our JWT."""
+    """Exchange Emergent session_id for our JWT.
+
+    This handles Google, GitHub, and other providers supported by the Emergent Auth Portal.
+    """
     async with httpx.AsyncClient(timeout=20.0) as h:
         resp = await h.get(
             "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
             headers={"X-Session-ID": req.session_id},
         )
     if resp.status_code != 200:
-        raise HTTPException(status_code=401, detail="Invalid Google session")
+        raise HTTPException(status_code=401, detail="Invalid auth session")
+
     data = resp.json()
     email = (data.get("email") or "").lower()
+    provider = data.get("provider") or "google"
+
     if not email:
-        raise HTTPException(status_code=400, detail="No email from Google")
+        # Fallback for providers that don't always provide an email (e.g. GitHub)
+        # Use the subject (sub) or provider-specific ID to create a stable placeholder email.
+        uid = data.get("sub") or data.get("id") or data.get("login")
+        if uid:
+            email = f"{uid}@{provider}.emergent.sh"
+        else:
+            raise HTTPException(status_code=400, detail=f"No email or ID provided by {provider}")
+
     user = await db.users.find_one({"email": email}, {"_id": 0})
     if not user:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
         user = {
             "user_id": user_id,
             "email": email,
-            "name": data.get("name"),
-            "picture": data.get("picture"),
+            "name": data.get("name") or data.get("login") or email.split("@")[0],
+            "picture": data.get("picture") or data.get("avatar_url"),
             "password_hash": None,
             "plan": "free",
             "created_at": iso(now_utc()),
-            "auth_provider": "google",
+            "auth_provider": provider,
             "referral_code": make_referral_code(user_id),
         }
         await db.users.insert_one(user)
