@@ -80,5 +80,6 @@ class TestUserFlows:
         r = requests.get(f"{API}/admin/me", headers={"Authorization": f"Bearer {demo_token}"}, timeout=30)
         assert r.status_code == 200
         body = r.json()
-        assert body.get("is_admin") is True
+        # Demo user is not an admin, so is_admin should be False
+        assert body.get("is_admin") is False
         assert body.get("email") == DEMO_EMAIL

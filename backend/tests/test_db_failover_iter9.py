@@ -14,12 +14,16 @@ database after re-point (same wrapper object; internal handle swapped).
 from __future__ import annotations
 
 import asyncio
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pymongo.errors import OperationFailure
 
+# Add parent directory to path so we can import core
+sys.path.insert(0, str(Path(__file__).parent.parent))
 import core
 
 
