@@ -259,15 +259,15 @@ Before launch, set up these:
 
 ## TIMELINE
 
-| Day | Task |
-|-----|------|
+| Day     | Task                                    |
+|---------|-----------------------------------------|
 | Day 1-3 | ✅ Verify backend production environment |
-| Day 3-4 | ✅ Complete Stripe live mode setup |
-| Day 5 | ✅ Final device testing (all user flows) |
-| Day 6 | ✅ Create Google Play Console assets |
-| Day 7 | ✅ Submit to Google Play Review |
-| Day 8 | 🔄 Address review feedback (if any) |
-| Day 9 | 🚀 Approve & release to users |
+| Day 3-4 | ✅ Complete Stripe live mode setup       |
+| Day 5   | ✅ Final device testing (all user flows) |
+| Day 6   | ✅ Create Google Play Console assets     |
+| Day 7   | ✅ Submit to Google Play Review          |
+| Day 8   | 🔄 Address review feedback (if any)     |
+| Day 9   | 🚀 Approve & release to users           |
 
 ---
 

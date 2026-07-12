@@ -62,7 +62,7 @@
     }
   },
   "animations": {
-    "particles": "Use TSParticles or Framer Motion to create a slow-moving, subtle starry nebula background behind the main content area.",
+    "particles": "Use Particles or Framer Motion to create a slow-moving, subtle starry nebula background behind the main content area.",
     "page_transitions": "Framer Motion slide up (y: 20, opacity: 0 -> y: 0, opacity: 1) with spring physics.",
     "hover_states": "Cards lift slightly (-translate-y-1) and inner glow intensifies.",
     "energetic_edges": "Use a rotating conic-gradient mask on the border of the main 'Create' button to simulate lightning/energy running along the edge."
@@ -112,9 +112,9 @@
     "MUST load 'Unbounded' and 'Outfit' fonts via Google Fonts in index.html.",
     "Build this as a mobile-first web app using standard React + Tailwind. Limit the max-width of the main container to 'max-w-md mx-auto' with a border-x border-white/10 to mimic a mobile phone viewport on desktop screens, or make it fully responsive if preferred.",
     "Implement the background using fixed positioning and the provided nebula background image with opacity-30, overlaid with an absolute black-to-transparent gradient from the bottom.",
-    "Do NOT use generic Shadcn cards for the main feed. Use custom raw div layouts to achieve the glowing borders and specific internal paddings.",
+    "Do NOT use generic Shading cards for the main feed. Use custom raw div layouts to achieve the glowing borders and specific internal paddings.",
     "For the bottom navigation, ensure it is fixed to the bottom, uses backdrop-blur-2xl, and does not overlap content (add pb-24 to the main wrapper).",
     "All interactive elements MUST have `data-testid` attributes (e.g., data-testid='start-creating-btn').",
-    "Integrate Shadcn primitives (Dialog, Select, Form) only for complex functional UI like Login/Settings/Pricing billing toggles. Custom-style them to fit the dark neon theme."
+    "Integrate Shading primitives (Dialog, Select, Form) only for complex functional UI like Login/Settings/Pricing billing toggles. Custom-style them to fit the dark neon theme."
   ]
 }
