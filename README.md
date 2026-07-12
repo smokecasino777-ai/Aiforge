@@ -12,10 +12,10 @@ This workspace is connected to GitHub and the Emergent platform using the follow
 
 ### Emergent Platform
 - **Job ID**: `03054408-b3a7-4c6e-b972-4db75114faff`
-- **Preview URL**: [https://fierce-forge-ios.preview.emergentagent.com](https://fierce-forge-ios.preview.emergentagent.com)
+- **Preview URL**: [https://vscode-cfa4578c-f7f7-4f8a-90ff-8bece436339f.preview.emergentagent.com](https://vscode-cfa4578c-f7f7-4f8a-90ff-8bece436339f.preview.emergentagent.com)
 
 ### GitHub OAuth App (User Logins)
-- **Homepage URL**: `https://fierce-forge-ios.preview.emergentagent.com`
+- **Homepage URL**: `https://vscode-cfa4578c-f7f7-4f8a-90ff-8bece436339f.preview.emergentagent.com`
 - **Authorization Callback URL**: `https://auth.emergentagent.com/oauth/callback`
 
 ### CI/CD Integration
