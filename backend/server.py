@@ -13,7 +13,7 @@ import uuid
 import bcrypt
 
 from core import ADMIN_EMAIL, db, iso, logger, make_referral_code, mongo_client, now_utc, select_authorized_db
-from routes import admin, assets, auth, avatar, checkout, editor, generation, legal, referrals
+from routes import admin, assets, auth, avatar, checkout, editor, generation, git, legal, referrals
 
 app = FastAPI(title="AiForge API")
 api = APIRouter(prefix="/api")
@@ -41,6 +41,7 @@ api.include_router(checkout.router)
 api.include_router(editor.router)
 api.include_router(avatar.router)
 api.include_router(admin.router)
+api.include_router(git.router)
 
 
 # ----- Startup / Shutdown -----

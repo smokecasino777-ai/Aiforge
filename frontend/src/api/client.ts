@@ -236,6 +236,16 @@ export const api = {
       },
     );
   },
+  // ---- Git (owner-only) ----
+  async gitStatus() {
+    return request<{ status: string; last_commit: string; branch: string }>('/admin/git/status');
+  },
+  async gitPull() {
+    return request<{ output: string }>('/admin/git/pull', { method: 'POST' });
+  },
+  async gitPush() {
+    return request<{ output: string }>('/admin/git/push', { method: 'POST' });
+  },
   // ---- Editor (AI image / video edit) ----
   async editorEnhance(image_b64: string) {
     return request<{ image_b64: string; media_mime: string; op: string }>(
