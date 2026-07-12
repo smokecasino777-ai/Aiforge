@@ -1,0 +1,16 @@
+name: Emergent Deploy
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  notify-emergent:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Emergent Webhook
+        run: |
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"ref": "${{ github.ref }}", "before": "${{ github.event.before }}", "after": "${{ github.event.after }}"}' \
+            https://demobackend.emergentagent.com/jobs/03054408-b3a7-4c6e-b972-4db75114faff/webhook

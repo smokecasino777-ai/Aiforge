@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "forge",
+    "scheme": "aiforge",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
