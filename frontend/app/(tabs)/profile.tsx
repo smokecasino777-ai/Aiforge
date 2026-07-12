@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Image, Alert, Platform, Share } fro
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { LogOut, Mail, Crown, BarChart2, Shield, Info, Gift, Share2, Copy, Trash2, KeyRound, UserCircle2, TestTube2 } from 'lucide-react-native';
+import { LogOut, Mail, Crown, BarChart2, Shield, Info, Gift, Share2, Copy, Trash2, KeyRound, UserCircle2, TestTube2, GitBranch, RefreshCcw } from 'lucide-react-native';
 import StarryBackground from '@/src/components/StarryBackground';
 import GhostLogoBackground from '@/src/components/GhostLogoBackground';
 import GradientButton from '@/src/components/GradientButton';
@@ -23,6 +23,7 @@ export default function Profile() {
     share_text: string;
   } | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [gitInfo, setGitInfo] = useState<{ status: string; last_commit: string; branch: string } | null>(null);
 
   const loadRef = useCallback(async () => {
     try {
@@ -32,6 +33,10 @@ export default function Profile() {
     try {
       const a = await api.adminMe();
       setIsAdmin(a.is_admin);
+      if (a.is_admin) {
+        const g = await api.gitStatus();
+        setGitInfo(g);
+      }
     } catch {}
   }, []);
 
@@ -244,6 +249,42 @@ export default function Profile() {
           </View>
 
           <View style={styles.menu}>
+            {isAdmin && gitInfo ? (
+              <View style={styles.gitCard}>
+                <View style={styles.row}>
+                  <GitBranch size={16} color={colors.cyan} />
+                  <Text style={styles.gitTitle}>System Information</Text>
+                </View>
+                <Text style={styles.gitKv}>
+                  <Text style={styles.gitKey}>Branch: </Text>
+                  <Text style={styles.gitVal}>{gitInfo.branch}</Text>
+                </Text>
+                <Text style={styles.gitKv}>
+                  <Text style={styles.gitKey}>Commit: </Text>
+                  <Text numberOfLines={1} style={styles.gitVal}>{gitInfo.last_commit}</Text>
+                </Text>
+                <PressableScale
+                  onPress={async () => {
+                    try {
+                      Alert.alert('Syncing', 'Pulling latest changes from GitHub...');
+                      const res = await api.gitPull();
+                      Alert.alert('Sync Complete', res.output.slice(0, 500));
+                      const g = await api.gitStatus();
+                      setGitInfo(g);
+                    } catch (e: any) {
+                      Alert.alert('Sync Failed', e.message);
+                    }
+                  }}
+                  style={{ marginTop: 4 }}
+                >
+                  <View style={styles.syncBtn}>
+                    <RefreshCcw size={12} color={colors.cyan} />
+                    <Text style={styles.syncBtnText}>Pull Latest from GitHub</Text>
+                  </View>
+                </PressableScale>
+              </View>
+            ) : null}
+
             {isAdmin ? (
               <PressableScale
                 onPress={async () => {
@@ -270,6 +311,42 @@ export default function Profile() {
             <PressableScale onPress={() => router.push('/legal/terms' as any)} testID="menu-terms">
               <MenuItem icon={<Info size={16} color={colors.green} />} label="Terms of Service" sub="Rules of the road" />
             </PressableScale>
+            {isAdmin && gitInfo ? (
+              <View style={styles.gitCard}>
+                <View style={styles.row}>
+                  <GitBranch size={16} color={colors.cyan} />
+                  <Text style={styles.gitTitle}>System Information</Text>
+                </View>
+                <Text style={styles.gitKv}>
+                  <Text style={styles.gitKey}>Branch: </Text>
+                  <Text style={styles.gitVal}>{gitInfo.branch}</Text>
+                </Text>
+                <Text style={styles.gitKv}>
+                  <Text style={styles.gitKey}>Commit: </Text>
+                  <Text numberOfLines={1} style={styles.gitVal}>{gitInfo.last_commit}</Text>
+                </Text>
+                <PressableScale
+                  onPress={async () => {
+                    try {
+                      Alert.alert('Syncing', 'Pulling latest changes from GitHub...');
+                      const res = await api.gitPull();
+                      Alert.alert('Sync Complete', res.output.slice(0, 500));
+                      const g = await api.gitStatus();
+                      setGitInfo(g);
+                    } catch (e: any) {
+                      Alert.alert('Sync Failed', e.message);
+                    }
+                  }}
+                  style={{ marginTop: 4 }}
+                >
+                  <View style={styles.syncBtn}>
+                    <RefreshCcw size={12} color={colors.cyan} />
+                    <Text style={styles.syncBtnText}>Pull Latest from GitHub</Text>
+                  </View>
+                </PressableScale>
+              </View>
+            ) : null}
+
             {isAdmin ? (
               <PressableScale onPress={() => router.push('/admin/secrets' as any)} testID="menu-admin-secrets">
                 <MenuItem
@@ -417,4 +494,31 @@ const styles = StyleSheet.create({
   menuIcon: { width: 30, height: 30, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.04)', alignItems: 'center', justifyContent: 'center' },
   menuLabel: { color: colors.text, fontSize: 14, fontWeight: '700' },
   menuSub: { color: colors.textDim, fontSize: 11 },
+  gitCard: {
+    backgroundColor: 'rgba(0,240,255,0.05)',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.cyan + '44',
+    padding: 14,
+    gap: 6,
+    marginTop: 8,
+  },
+  gitTitle: { color: colors.text, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 },
+  gitKv: { color: colors.textDim, fontSize: 11 },
+  gitKey: { color: colors.textMuted, fontWeight: '700' },
+  gitVal: { color: colors.cyan, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  syncBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: radius.sm,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    alignSelf: 'flex-start',
+  },
+  syncBtnText: { color: colors.cyan, fontSize: 10, fontWeight: '700' },
 });

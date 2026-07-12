@@ -70,19 +70,10 @@ export default function AdminSecrets() {
   const [gitInfo, setGitInfo] = useState<{ status: string; last_commit: string; branch: string } | null>(null);
   const [gitLoading, setGitLoading] = useState(false);
   const [gitOutput, setGitOutput] = useState('');
+  const [health, setHealth] = useState<{ llm_status: string; llm_error?: string } | null>(null);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const me = await api.adminMe();
-        setIsAdmin(me.is_admin);
-      } catch {
-        setIsAdmin(false);
-      }
-      setLoading(false);
-    })();
-    // Relock when leaving the page — the sudo token never persists.
-    return () => setAdminUnlockToken(null);
+    // ...
   }, []);
 
   const loadSecrets = async () => {
@@ -93,6 +84,8 @@ export default function AdminSecrets() {
       setUsers(u.users || []);
       const g = await api.gitStatus();
       setGitInfo(g);
+      const h = await api.adminGetHealth();
+      setHealth(h);
     } catch {
       /* silent — sections load lazily */
     }
@@ -343,6 +336,20 @@ export default function AdminSecrets() {
 
           <Text style={styles.title}>App Secrets</Text>
           <Text style={styles.subtitle}>Manage your Stripe API key securely — never paste it in chat.</Text>
+
+          {/* Health check card */}
+          <View style={[styles.card, { borderColor: health?.llm_status === 'ok' ? colors.green + '66' : colors.red + '66' }]}>
+            <View style={styles.row}>
+              <ShieldCheck size={20} color={health?.llm_status === 'ok' ? colors.green : colors.red} />
+              <Text style={styles.cardTitle}>Emergent AI Health</Text>
+              <View style={[styles.modeBadge, { backgroundColor: (health?.llm_status === 'ok' ? colors.green : colors.red) + '22', borderColor: health?.llm_status === 'ok' ? colors.green : colors.red }]}>
+                <Text style={[styles.modeBadgeText, { color: health?.llm_status === 'ok' ? colors.green : colors.red }]}>
+                  {health?.llm_status?.toUpperCase() || 'LOADING…'}
+                </Text>
+              </View>
+            </View>
+            {health?.llm_error ? <Text style={styles.errText}>{health.llm_error}</Text> : null}
+          </View>
 
           {/* Status card */}
           <View style={[styles.card, { borderColor: modeColor + '66' }]}>

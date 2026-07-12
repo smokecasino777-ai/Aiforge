@@ -195,6 +195,14 @@ export const api = {
       is_live: boolean;
     }>('/admin/stripe-key');
   },
+  async adminGetHealth() {
+    return request<{
+      llm_key: string;
+      llm_status: string;
+      llm_error?: string;
+      stripe_status: string;
+    }>('/admin/health');
+  },
   async adminSetStripeKey(key: string) {
     return request<{
       ok: boolean;
