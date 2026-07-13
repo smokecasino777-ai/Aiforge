@@ -311,41 +311,6 @@ export default function Profile() {
             <PressableScale onPress={() => router.push('/legal/terms' as any)} testID="menu-terms">
               <MenuItem icon={<Info size={16} color={colors.green} />} label="Terms of Service" sub="Rules of the road" />
             </PressableScale>
-            {isAdmin && gitInfo ? (
-              <View style={styles.gitCard}>
-                <View style={styles.row}>
-                  <GitBranch size={16} color={colors.cyan} />
-                  <Text style={styles.gitTitle}>System Information</Text>
-                </View>
-                <Text style={styles.gitKv}>
-                  <Text style={styles.gitKey}>Branch: </Text>
-                  <Text style={styles.gitVal}>{gitInfo.branch}</Text>
-                </Text>
-                <Text style={styles.gitKv}>
-                  <Text style={styles.gitKey}>Commit: </Text>
-                  <Text numberOfLines={1} style={styles.gitVal}>{gitInfo.last_commit}</Text>
-                </Text>
-                <PressableScale
-                  onPress={async () => {
-                    try {
-                      Alert.alert('Syncing', 'Pulling latest changes from GitHub...');
-                      const res = await api.gitPull();
-                      Alert.alert('Sync Complete', res.output.slice(0, 500));
-                      const g = await api.gitStatus();
-                      setGitInfo(g);
-                    } catch (e: any) {
-                      Alert.alert('Sync Failed', e.message);
-                    }
-                  }}
-                  style={{ marginTop: 4 }}
-                >
-                  <View style={styles.syncBtn}>
-                    <RefreshCcw size={12} color={colors.cyan} />
-                    <Text style={styles.syncBtnText}>Pull Latest from GitHub</Text>
-                  </View>
-                </PressableScale>
-              </View>
-            ) : null}
 
             {isAdmin ? (
               <PressableScale onPress={() => router.push('/admin/secrets' as any)} testID="menu-admin-secrets">
@@ -357,6 +322,7 @@ export default function Profile() {
               </PressableScale>
             ) : null}
           </View>
+
 
           <GradientButton
             title="Sign Out"
