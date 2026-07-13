@@ -26,7 +26,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export default function Register() {
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string }>();
-  const { signUp, signInWithOAuth } = useAuth();
+  const { signUp, signInWithGoogleSession } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -102,7 +102,7 @@ export default function Register() {
     try {
       const sid = await startGoogleSignIn();
       if (sid) {
-        await signInWithOAuth(sid);
+        await signInWithGoogleSession(sid);
         router.replace('/(tabs)');
       }
     } catch (e: any) {
@@ -120,7 +120,7 @@ export default function Register() {
     try {
       const sid = await startGitHubSignIn();
       if (sid) {
-        await signInWithOAuth(sid);
+        await signInWithGoogleSession(sid);
         router.replace('/(tabs)');
       }
     } catch (e: any) {

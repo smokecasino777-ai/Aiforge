@@ -2,7 +2,7 @@
   "expo": {
     "name": "AiForge",
     "slug": "forge",
-    "version": "1.0.0",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "aiforge",
@@ -20,6 +20,7 @@
     },
     "android": {
       "package": "app.emergent.fierceforgeios2c75fc60",
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#020208"

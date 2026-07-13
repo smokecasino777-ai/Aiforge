@@ -29,7 +29,7 @@ const SUPPORT_EMAIL = 'jraycwalker@gmail.com';
 export default function Login() {
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string }>();
-  const { signIn, signInWithOAuth } = useAuth();
+  const { signIn, signInWithGoogleSession } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -105,7 +105,7 @@ export default function Login() {
     try {
       const sid = await startGoogleSignIn();
       if (sid) {
-        await signInWithOAuth(sid);
+        await signInWithGoogleSession(sid);
         router.replace('/(tabs)');
       }
     } catch (e: any) {
@@ -123,7 +123,7 @@ export default function Login() {
     try {
       const sid = await startGitHubSignIn();
       if (sid) {
-        await signInWithOAuth(sid); // We reuse this as it just sends the SID to backend
+        await signInWithGoogleSession(sid); // We reuse this as it just sends the SID to backend
         router.replace('/(tabs)');
       }
     } catch (e: any) {

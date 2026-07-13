@@ -6,7 +6,7 @@ type AuthCtx = {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name?: string, referralCode?: string) => Promise<void>;
-  signInWithOAuth: (sessionId: string) => Promise<void>;
+  signInWithGoogleSession: (sessionId: string) => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -69,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(r.user);
   }, []);
 
-  const signInWithOAuth = useCallback(async (sessionId: string) => {
+  const signInWithGoogleSession = useCallback(async (sessionId: string) => {
     const r = await api.oAuth(sessionId);
     await api.setToken(r.token);
     setUser(r.user);
@@ -81,8 +81,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, signIn, signUp, signInWithOAuth, signOut, refresh }),
-    [user, loading, signIn, signUp, signInWithOAuth, signOut, refresh],
+    () => ({ user, loading, signIn, signUp, signInWithGoogleSession, signOut, refresh }),
+    [user, loading, signIn, signUp, signInWithGoogleSession, signOut, refresh],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
