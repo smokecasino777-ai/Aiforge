@@ -19,7 +19,7 @@ SplashScreen.preventAutoHideAsync();
  * Exchanges it for our JWT, then routes into the app.
  */
 function OAuthSessionCatcher() {
-  const { signInWithOAuth } = useAuth();
+  const { signInWithGoogleSession } = useAuth();
   const router = useRouter();
   const processedRef = useRef<Set<string>>(new Set());
 
@@ -28,7 +28,7 @@ function OAuthSessionCatcher() {
     if (!sid || processedRef.current.has(sid)) return;
     processedRef.current.add(sid);
     try {
-      await signInWithOAuth(sid);
+      await signInWithGoogleSession(sid);
       router.replace('/(tabs)');
     } catch {
       // silent — user stays on the current screen and can retry
