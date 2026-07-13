@@ -1,4 +1,30 @@
-<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="11" time="6.142" timestamp="2026-07-08T15:33:20.090774+00:00" hostname="agent-env-cfa4578c-f7f7-4f8a-90ff-8bece436339f"><testcase classname="backend.tests.test_google_auth_iter11.TestGoogleAuthEndpoint" name="test_bogus_session_id_401" time="0.769" /><testcase classname="backend.tests.test_google_auth_iter11.TestGoogleAuthEndpoint" name="test_missing_session_id_422" time="0.048" /><testcase classname="backend.tests.test_google_auth_iter11.TestGoogleAuthEndpoint" name="test_empty_session_id" time="1.354" /><testcase classname="backend.tests.test_google_auth_iter11.TestEmailPasswordAuth" name="test_demo_login_success" time="0.381" /><testcase classname="backend.tests.test_google_auth_iter11.TestEmailPasswordAuth" name="test_owner_login_and_admin" time="0.319" /><testcase classname="backend.tests.test_google_auth_iter11.TestEmailPasswordAuth" name="test_admin_lockdown_without_sudo" time="0.319" /><testcase classname="backend.tests.test_google_auth_iter11.TestEmailPasswordAuth" name="test_login_wrong_password_401" time="0.272" /><testcase classname="backend.tests.test_google_auth_iter11.TestEmailPasswordAuth" name="test_login_unknown_email_401" time="0.055" /><testcase classname="backend.tests.test_google_auth_iter11.TestRegistration" name="test_register_new_and_duplicate" time="0.279"><failure message="AssertionError: assert 'test_iter11_...e@example.com' == 'TEST_iter11_...e@example.com'&#10;  &#10;  - TEST_iter11_68c939de@example.com&#10;  ? ^^^^&#10;  + test_iter11_68c939de@example.com&#10;  ? ^^^^">backend/tests/test_google_auth_iter11.py:89: in test_register_new_and_duplicate
+<?xml version="1.0" encoding="utf-8"?><!--suppress ALL, GrazieInspectionRunner -->
+<testsuites name="pytest tests">
+    <testsuite name="pytest" errors="0" failures="1" hostname="agent-env-cfa4578c-f7f7-4f8a-90ff-8bece436339f" skipped="0" tests="11"
+        time="6.142"
+        timestamp="2026-07-08T15:33:20.090774+00:00">
+        <testcase name="test_bogus_session_id_401"
+            classname="backend.tests.test_google_auth_iter11.TestGoogleAuthEndpoint" time="0.769" />
+        <testcase name="test_missing_session_id_422"
+            classname="backend.tests.test_google_auth_iter11.TestGoogleAuthEndpoint" time="0.048" />
+        <testcase name="test_empty_session_id"
+            classname="backend.tests.test_google_auth_iter11.TestGoogleAuthEndpoint" time="1.354" />
+        <testcase name="test_demo_login_success"
+            classname="backend.tests.test_google_auth_iter11.TestEmailPasswordAuth" time="0.381" />
+        <testcase name="test_owner_login_and_admin"
+            classname="backend.tests.test_google_auth_iter11.TestEmailPasswordAuth" time="0.319" />
+        <testcase name="test_admin_lockdown_without_sudo"
+            classname="backend.tests.test_google_auth_iter11.TestEmailPasswordAuth" time="0.319" />
+        <testcase name="test_login_wrong_password_401"
+            classname="backend.tests.test_google_auth_iter11.TestEmailPasswordAuth" time="0.272" />
+        <testcase name="test_login_unknown_email_401"
+            classname="backend.tests.test_google_auth_iter11.TestEmailPasswordAuth"
+            time="0.055" /><!--suppress GrazieInspectionRunner -->
+        <testcase name="test_register_new_and_duplicate"
+            classname="backend.tests.test_google_auth_iter11.TestRegistration" time="0.279">
+            <failure
+                message="AssertionError: assert 'test_iter11_...e@example.com' == 'TEST_iter11_...e@example.com'&#10;  &#10;  - TEST_iter11_68c939de@example.com&#10;  ? ^^^^&#10;  + test_iter11_68c939de@example.com&#10;  ? ^^^^">
+                backend/tests/test_google_auth_iter11.py:89: in test_register_new_and_duplicate
     assert data["user"]["email"] == email
 E   AssertionError: assert 'test_iter11_...e@example.com' == 'TEST_iter11_...e@example.com'
 E     
