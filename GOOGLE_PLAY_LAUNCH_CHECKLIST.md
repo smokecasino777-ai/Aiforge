@@ -91,6 +91,9 @@
 ## 📋 GOOGLE PLAY CONSOLE SETUP
 
 ### Prerequisites (do these FIRST)
+- [x] Record App Signing Fingerprints:
+  - **App Signing Key (Play Console)**: `98:7A:C1:49:B7:9C:03:FC:82:41:B7:94:FA:97:9D:45:CC:2D:46:D5:1F:B1:50:7F:F4:98:0A:5F:9A:D9:2B:14` (In review)
+  - **Upload Key (Local)**: `0C:A8:A8:11:B3:A0:58:28:05:17:D9:1C:43:A5:62:63:C4:45:05:34:26:BF:19:D1:1F:FB:0E:4A:4B:1E:01:84` (Verified)
 - [ ] Create Google Play Developer account ($25 one-time fee)
 - [ ] Setup payment method for Play Console
 

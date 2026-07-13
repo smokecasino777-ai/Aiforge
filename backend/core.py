@@ -26,14 +26,25 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env", override=False)
 
 # ----- Configuration -----
-MONGO_URL = os.environ["MONGO_URL"]
-DB_NAME = os.environ["DB_NAME"]
-EMERGENT_LLM_KEY = os.environ["EMERGENT_LLM_KEY"]
+# PROBING: We try to get these from os.environ first. In Emergent production,
+# they are injected. Locally, we fall back to .env.
+def get_env(name: str, default: Optional[str] = None) -> str:
+    val = os.environ.get(name) or default
+    if val is None:
+        logger.warning(f"CRITICAL: Environment variable '{name}' is missing!")
+        # We return a placeholder to avoid immediate crash, but the app will likely fail later.
+        return f"MISSING_{name}"
+    return val
+
+MONGO_URL = get_env("MONGO_URL", "mongodb://localhost:27017")
+DB_NAME = get_env("DB_NAME", "aiforge")
+EMERGENT_LLM_KEY = get_env("EMERGENT_LLM_KEY", "sk_test_emergent")
 JWT_SECRET = os.environ.get("JWT_SECRET", "aiforge-secret-change-me")
 JWT_ALG = "HS256"
 JWT_EXP_DAYS = 7
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "sk_test_emergent")
-ADMIN_EMAIL = (os.environ.get("ADMIN_EMAIL") or "").lower().strip()
+ADMIN_EMAIL = (os.environ.get("ADMIN_EMAIL") or "jraycwalker@gmail.com").lower().strip()
+
 
 # Runtime container so /api/admin endpoints can hot-swap the live Stripe key
 # without restarting the backend.

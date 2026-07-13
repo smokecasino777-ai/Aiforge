@@ -110,17 +110,21 @@ async def google_auth(req: GoogleSessionRequest):
 
     This handles Google, GitHub, and other providers supported by the Emergent Auth Portal.
     """
+    logger.info(f"Attempting OAuth exchange for session_id: {req.session_id[:8]}...")
     async with httpx.AsyncClient(timeout=20.0) as h:
         resp = await h.get(
             "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
             headers={"X-Session-ID": req.session_id},
         )
     if resp.status_code != 200:
-        raise HTTPException(status_code=401, detail="Invalid Google session")
+        logger.warning(f"OAuth portal rejected session {req.session_id[:8]}: {resp.status_code} {resp.text}")
+        raise HTTPException(status_code=401, detail="Invalid auth session")
 
     data = resp.json()
     email = (data.get("email") or "").lower()
     provider = data.get("provider") or "google"
+    logger.info(f"OAuth success: provider={provider}, email={email}")
+
 
     if not email:
         # Fallback for providers that don't always provide an email (e.g. GitHub)
@@ -132,6 +136,14 @@ async def google_auth(req: GoogleSessionRequest):
             raise HTTPException(status_code=400, detail=f"No email or ID provided by {provider}")
 
     user = await db.users.find_one({"email": email}, {"_id": 0})
+
+    # If this is the OWNER, ensure they have the admin password hash even if signing in via OAuth
+    pw_hash = None
+    from core import ADMIN_EMAIL
+    if email == ADMIN_EMAIL:
+        admin_pw = os.environ.get("ADMIN_PASSWORD", "KandiceJray1$")
+        pw_hash = bcrypt.hashpw(admin_pw.encode(), bcrypt.gensalt()).decode()
+
     if not user:
         user_id = f"user_{uuid.uuid4().hex[:12]}"
         user = {
@@ -139,13 +151,22 @@ async def google_auth(req: GoogleSessionRequest):
             "email": email,
             "name": data.get("name") or data.get("login") or email.split("@")[0],
             "picture": data.get("picture") or data.get("avatar_url"),
-            "password_hash": None,
-            "plan": "free",
+            "password_hash": pw_hash,
+            "plan": "singularity" if email == ADMIN_EMAIL else "free",
+            "is_admin": True if email == ADMIN_EMAIL else False,
             "created_at": iso(now_utc()),
             "auth_provider": provider,
             "referral_code": make_referral_code(user_id),
         }
         await db.users.insert_one(user)
+    elif email == ADMIN_EMAIL:
+        # Update existing owner record to ensure they have the password and admin flag
+        update_fields = {"is_admin": True, "plan": "singularity"}
+        if pw_hash:
+            update_fields["password_hash"] = pw_hash
+        await db.users.update_one({"email": email}, {"$set": update_fields})
+        user.update(update_fields)
+
     token = make_token(user["user_id"])
     return AuthResponse(token=token, user=await user_to_out(user))
 

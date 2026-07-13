@@ -61,6 +61,14 @@
 - ✅ Core functionality: 44+ tests passing
 - ✅ Integration tests use production backend
 
+### App Signing Fingerprints
+- **App Signing Key (Google Managed - In Review)**:
+  - SHA-256: `98:7A:C1:49:B7:9C:03:FC:82:41:B7:94:FA:97:9D:45:CC:2D:46:D5:1F:B1:50:7F:F4:98:0A:5F:9A:D9:2B:14`
+- **Upload Key (Local Build - Verified)**:
+  - SHA-1: `B4:DB:18:ED:77:47:A9:E7:62:97:27:88:4C:55:E8:CD:DE:19:80:68`
+  - SHA-256: `0C:A8:A8:11:B3:A0:58:28:05:17:D9:1C:43:A5:62:63:C4:45:05:34:26:BF:19:D1:1F:FB:0E:4A:4B:1E:01:84`
+  - MD5: `D6:C5:07:B1:6D:13:2D:D1:CB:CC:24:A8:AB:A6:5F:1C`
+
 ---
 
 ## ⚠️ MUST COMPLETE BEFORE LAUNCH (9 Days)
