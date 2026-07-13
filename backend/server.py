@@ -15,8 +15,9 @@ import bcrypt
 from core import ADMIN_EMAIL, db, iso, logger, make_referral_code, mongo_client, now_utc, select_authorized_db
 from routes import admin, assets, auth, avatar, checkout, editor, generation, git, legal, referrals
 
-# AiForge API - Triggering deployment
+# AiForge API - Force Trigger Deployment Update (Commit ae05ae1)
 app = FastAPI(title="AiForge API")
+
 api = APIRouter(prefix="/api")
 
 
