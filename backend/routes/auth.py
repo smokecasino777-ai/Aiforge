@@ -116,7 +116,7 @@ async def google_auth(req: GoogleSessionRequest):
             headers={"X-Session-ID": req.session_id},
         )
     if resp.status_code != 200:
-        raise HTTPException(status_code=401, detail="Invalid auth session")
+        raise HTTPException(status_code=401, detail="Invalid Google session")
 
     data = resp.json()
     email = (data.get("email") or "").lower()
