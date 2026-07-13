@@ -1,4 +1,5 @@
 """Auth routes: register, login, google session, me, delete-me."""
+import os
 import uuid
 from datetime import timedelta
 
