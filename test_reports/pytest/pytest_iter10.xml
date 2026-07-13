@@ -1,4 +1,13 @@
-<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="5" skipped="1" tests="13" time="8.194" timestamp="2026-07-07T01:56:20.737950+00:00" hostname="agent-env-cfa4578c-f7f7-4f8a-90ff-8bece436339f"><testcase classname="backend.tests.test_azure_ai_iter10.TestAuth" name="test_owner_is_admin" time="0.581"><failure message="AssertionError: assert None == 'singularity'&#10; +  where None = &lt;built-in method get of dict object at 0xfbd226d38940&gt;('plan')&#10; +    where &lt;built-in method get of dict object at 0xfbd226d38940&gt; = {'email': 'jraycwalker@gmail.com', 'is_admin': True}.get">backend/tests/test_azure_ai_iter10.py:68: in test_owner_is_admin
+<?xml version="1.0" encoding="utf-8"?><!--suppress ALL, GrazieInspectionRunner -->
+<testsuites name="pytest tests">
+    <testsuite name="pytest" errors="0" failures="5" hostname="agent-env-cfa4578c-f7f7-4f8a-90ff-8bece436339f" skipped="1" tests="13"
+        time="8.194"
+        timestamp="2026-07-07T01:56:20.737950+00:00">
+        <testcase name="test_owner_is_admin" classname="backend.tests.test_azure_ai_iter10.TestAuth"
+            time="0.581">
+            <failure
+                message="AssertionError: assert None == 'singularity'&#10; +  where None = &lt;built-in method get of dict object at 0xfbd226d38940&gt;('plan')&#10; +    where &lt;built-in method get of dict object at 0xfbd226d38940&gt; = {'email': 'jraycwalker@gmail.com', 'is_admin': True}.get">
+                backend/tests/test_azure_ai_iter10.py:68: in test_owner_is_admin
     assert me.get("plan") == "singularity"
 E   AssertionError: assert None == 'singularity'
 E    +  where None = &lt;built-in method get of dict object at 0xfbd226d38940&gt;('plan')
@@ -18,4 +27,26 @@ E    +  where 402 = &lt;Response [402]&gt;.status_code</failure></testcase><test
     assert r.status_code == 200, f"image gen failed: {r.status_code} {r.text[:300]}"
 E   AssertionError: image gen failed: 402 {"detail":"Daily limit reached (5). Upgrade your plan."}
 E   assert 402 == 200
-E    +  where 402 = &lt;Response [402]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_azure_ai_iter10.TestRegression" name="test_plans_returns_six" time="0.041" /><testcase classname="backend.tests.test_azure_ai_iter10.TestRegression" name="test_creations_list_demo" time="1.210" /><testcase classname="backend.tests.test_azure_ai_iter10.TestRegression" name="test_referrals_me" time="0.044" /><testcase classname="backend.tests.test_azure_ai_iter10.TestRegression" name="test_register_new_and_duplicate" time="0.351" /><testcase classname="backend.tests.test_azure_ai_iter10.TestRegression" name="test_admin_sudo_lockdown" time="0.350" /><testcase classname="backend.tests.test_azure_ai_iter10.TestRegression" name="test_checkout_session_creation" time="0.043"><skipped type="pytest.skip" message="checkout session returned 404: {&quot;detail&quot;:&quot;Not Found&quot;}">/app/backend/tests/test_azure_ai_iter10.py:249: checkout session returned 404: {"detail":"Not Found"}</skipped></testcase></testsuite></testsuites>
+        E + where 402 = &lt;Response [402]&gt;.status_code
+    </failure>
+    </testcase>
+        <testcase name="test_plans_returns_six"
+            classname="backend.tests.test_azure_ai_iter10.TestRegression" time="0.041" />
+        <testcase name="test_creations_list_demo"
+            classname="backend.tests.test_azure_ai_iter10.TestRegression" time="1.210" />
+        <testcase name="test_referrals_me"
+            classname="backend.tests.test_azure_ai_iter10.TestRegression" time="0.044" />
+        <testcase name="test_register_new_and_duplicate"
+            classname="backend.tests.test_azure_ai_iter10.TestRegression" time="0.351" />
+        <testcase name="test_admin_sudo_lockdown"
+            classname="backend.tests.test_azure_ai_iter10.TestRegression" time="0.350" /><!--suppress GrazieInspectionRunner -->
+        <testcase name="test_checkout_session_creation"
+            classname="backend.tests.test_azure_ai_iter10.TestRegression" time="0.043">
+            <skipped message="checkout session returned 404: {&quot;detail&quot;:&quot;Not Found&quot;}"
+                type="pytest.skip">
+                /app/backend/tests/test_azure_ai_iter10.py:249: checkout session returned 404:
+                {"detail":"Not Found"}
+            </skipped>
+        </testcase>
+    </testsuite>
+</testsuites>

@@ -1,8 +1,10 @@
+#file: noinspection GrazieInspectionRunner,GrazieInspectionRunner
 version: '3.8'
 
 services:
   mongodb:
     image: mongo:latest
+    # noinspection GrazieInspectionRunner
     container_name: aiforge-mongodb
     ports:
       - "27017:27017"
