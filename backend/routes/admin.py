@@ -28,8 +28,28 @@ from core import (
     validate_stripe_key,
     verify_sudo_token,
 )
+from models import StripeKeyRequest
 
-# ...
+router = APIRouter(tags=["admin"])
+
+
+class AdminResetPasswordRequest(BaseModel):
+    email: EmailStr
+    new_password: str
+
+
+class AdminUnlockRequest(BaseModel):
+    password: str
+
+
+def ensure_sudo(user: dict, x_admin_unlock: Optional[str]) -> None:
+    """Second factor: sensitive admin ops need a fresh sudo token."""
+    if not x_admin_unlock or not verify_sudo_token(x_admin_unlock, user["user_id"]):
+        raise HTTPException(
+            status_code=403,
+            detail="Admin panel is locked. Re-enter your admin password to unlock.",
+        )
+
 
 @router.get("/admin/health")
 async def admin_health(
@@ -56,27 +76,6 @@ async def admin_health(
         "llm_error": llm_err,
         "stripe_status": stripe_mode_of(current_stripe_key()),
     }
-from models import StripeKeyRequest
-
-router = APIRouter(tags=["admin"])
-
-
-class AdminResetPasswordRequest(BaseModel):
-    email: EmailStr
-    new_password: str
-
-
-class AdminUnlockRequest(BaseModel):
-    password: str
-
-
-def ensure_sudo(user: dict, x_admin_unlock: Optional[str]) -> None:
-    """Second factor: sensitive admin ops need a fresh sudo token."""
-    if not x_admin_unlock or not verify_sudo_token(x_admin_unlock, user["user_id"]):
-        raise HTTPException(
-            status_code=403,
-            detail="Admin panel is locked. Re-enter your admin password to unlock.",
-        )
 
 
 @router.post("/admin/unlock")

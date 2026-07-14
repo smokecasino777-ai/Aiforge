@@ -15,8 +15,9 @@ import bcrypt
 from core import ADMIN_EMAIL, db, iso, logger, make_referral_code, mongo_client, now_utc, select_authorized_db
 from routes import admin, assets, auth, avatar, checkout, editor, generation, git, legal, referrals
 
-# AiForge API - Version 1.0.3 (Force Deploy - July 13 18:05)
-app = FastAPI(title="AiForge API", version="1.0.3")
+# AiForge API - Version 1.0.4 (Hotfix: Fix admin router NameError)
+app = FastAPI(title="AiForge API", version="1.0.4")
+
 
 
 api = APIRouter(prefix="/api")
