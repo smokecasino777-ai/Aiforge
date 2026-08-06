@@ -29,35 +29,9 @@ from core import (
     verify_sudo_token,
 )
 
-# ...
-
-@router.get("/admin/health")
-async def admin_health(
-    user: dict = Depends(get_current_user),
-    x_admin_unlock: Optional[str] = Header(None, alias="X-Admin-Unlock"),
-):
-    await ensure_admin(user)
-    ensure_sudo(user, x_admin_unlock)
-
-    # Test LLM key
-    llm_ok = False
-    llm_err = None
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id="health-check").with_model("anthropic", "claude-sonnet-4-6")
-        await chat.send_message(UserMessage(text="hi"))
-        llm_ok = True
-    except Exception as e:
-        llm_err = str(e)
-
-    return {
-        "llm_key": "sk_test_emergent" if EMERGENT_LLM_KEY == "sk_test_emergent" else "custom",
-        "llm_status": "ok" if llm_ok else "error",
-        "llm_error": llm_err,
-        "stripe_status": stripe_mode_of(current_stripe_key()),
-    }
 from models import StripeKeyRequest
 
+# IMPORTANT: router must be defined BEFORE any @router decorators
 router = APIRouter(tags=["admin"])
 
 
@@ -79,6 +53,37 @@ def ensure_sudo(user: dict, x_admin_unlock: Optional[str]) -> None:
         )
 
 
+@router.get("/admin/health")
+async def admin_health(
+    user: dict = Depends(get_current_user),
+    x_admin_unlock: Optional[str] = Header(None, alias="X-Admin-Unlock"),
+):
+    await ensure_admin(user)
+    ensure_sudo(user, x_admin_unlock)
+
+    # Test LLM key
+    llm_ok = False
+    llm_err = None
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id="health-check").with_model(
+            "anthropic", "claude-sonnet-4-6"
+        )
+        await chat.send_message(UserMessage(text="hi"))
+        llm_ok = True
+    except Exception as e:
+        llm_err = str(e)
+
+    return {
+        "llm_key": "sk_test_emergent"
+        if EMERGENT_LLM_KEY == "sk_test_emergent"
+        else "custom",
+        "llm_status": "ok" if llm_ok else "error",
+        "llm_error": llm_err,
+        "stripe_status": stripe_mode_of(current_stripe_key()),
+    }
+
+
 @router.post("/admin/unlock")
 async def admin_unlock(
     req: AdminUnlockRequest, user: dict = Depends(get_current_user)
@@ -97,7 +102,11 @@ async def admin_me(user: dict = Depends(get_current_user)):
     """Lightweight check the frontend uses to decide whether to show admin UI."""
     try:
         await ensure_admin(user)
-        return {"is_admin": True, "email": user.get("email"), "plan": user.get("plan")}
+        return {
+            "is_admin": True,
+            "email": user.get("email"),
+            "plan": user.get("plan"),
+        }
     except HTTPException:
         return {"is_admin": False, "email": user.get("email")}
 
@@ -151,7 +160,7 @@ async def admin_stripe_key_set(
     RUNTIME["stripe_fingerprint"] = fp
     RUNTIME["stripe_updated_at"] = now
     logger.info(
-        f"Stripe key rotated by {user.get('email')} \u2192 mode={stripe_mode_of(key)}, fp={fp}"
+        f"Stripe key rotated by {user.get('email')} → mode={stripe_mode_of(key)}, fp={fp}"
     )
     return {
         "ok": True,
@@ -191,12 +200,7 @@ async def admin_list_users(
     user: dict = Depends(get_current_user),
     x_admin_unlock: Optional[str] = Header(None, alias="X-Admin-Unlock"),
 ):
-    """Compact list of every account in the system (owner-only).
-
-    Used by the Admin Secrets page to populate the "Reset User Password"
-    picker so the owner can recover a locked-out account without ever
-    pasting passwords into chat.
-    """
+    """Compact list of every account in the system (owner-only)."""
     await ensure_admin(user)
     ensure_sudo(user, x_admin_unlock)
     cursor = db.users.find(
@@ -222,11 +226,7 @@ async def admin_reset_user_password(
     user: dict = Depends(get_current_user),
     x_admin_unlock: Optional[str] = Header(None, alias="X-Admin-Unlock"),
 ):
-    """Owner-initiated password reset for any email/password account.
-
-    This is the in-app recovery path: a locked-out customer emails the
-    owner, and the owner issues a new password here — no email service.
-    """
+    """Owner-initiated password reset for any email/password account."""
     await ensure_admin(user)
     ensure_sudo(user, x_admin_unlock)
     email = req.email.lower().strip()
@@ -235,7 +235,9 @@ async def admin_reset_user_password(
         raise HTTPException(
             status_code=400, detail="New password must be at least 6 characters"
         )
-    target = await db.users.find_one({"email": email}, {"_id": 0, "user_id": 1, "auth_provider": 1})
+    target = await db.users.find_one(
+        {"email": email}, {"_id": 0, "user_id": 1, "auth_provider": 1}
+    )
     if not target:
         raise HTTPException(status_code=404, detail="No account with that email")
     if target.get("auth_provider") == "google":

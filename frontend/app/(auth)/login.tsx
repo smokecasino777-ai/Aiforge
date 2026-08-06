@@ -10,58 +10,72 @@ import {
   Alert,
   Linking,
 } from 'react-native';
+
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+
 import { useAuth } from '@/src/context/AuthContext';
+
 import StarryBackground from '@/src/components/StarryBackground';
 import GhostLogoBackground from '@/src/components/GhostLogoBackground';
 import PulsingLogo from '@/src/components/Logo';
 import GradientButton from '@/src/components/GradientButton';
 import PressableScale from '@/src/components/PressableScale';
+
 import { colors, radius } from '@/src/theme/colors';
-import { Mail, Lock, Github } from 'lucide-react-native';
+import { Mail, Lock, GitBranch } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { startGoogleSignIn, startGitHubSignIn } from '@/src/utils/googleAuth';
+
+import { startGoogleSignIn } from '@/src/utils/googleAuth';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SUPPORT_EMAIL = 'jraycwalker@gmail.com';
 
 export default function Login() {
+
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string }>();
-  const { signIn, signInWithOAuth } = useAuth();
+
+  const {
+    signIn,
+    signInWithGoogle,
+  } = useAuth();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
 
-  // Pre-fill email when user is forwarded from "Email already registered → Sign in instead"
+  const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  // GitHub is disabled → no need for useState
+  const githubLoading = false;
+
   useEffect(() => {
-    if (typeof params.email === 'string' && params.email && !email) {
+    if (
+      typeof params.email === 'string' &&
+      params.email &&
+      !email
+    ) {
       setEmail(params.email);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.email]);
 
   const doSignIn = async (e: string, p: string) => {
     setLoading(true);
+
     try {
       await signIn(e, p);
       router.replace('/(tabs)');
-    } catch (err: any) {
+    } catch (err:any) {
       const raw = (err?.message || '').toLowerCase();
-      const isCreds = raw.includes('invalid') || raw.includes('401');
-      const friendly = isCreds
+
+      const friendly =
+        raw.includes('invalid') ||
+        raw.includes('401')
         ? 'Email and password don’t match.'
         : err?.message || 'Something went wrong. Try again.';
-      Alert.alert('Sign-in failed', friendly, [
-        { text: 'Try again', style: 'cancel' },
-        { text: 'Forgot password?', onPress: showRecovery },
-        {
-          text: 'Create account',
-          onPress: () =>
-            router.push({ pathname: '/(auth)/register', params: { email: e } }),
-        },
-      ]);
+
+      Alert.alert('Sign-in failed', friendly);
     } finally {
       setLoading(false);
     }
@@ -69,89 +83,90 @@ export default function Login() {
 
   const onLogin = async () => {
     const trimmed = email.trim().toLowerCase();
+
     if (!trimmed || !password) {
       Alert.alert('Required', 'Enter your email and password to sign in.');
       return;
     }
+
     if (!EMAIL_RE.test(trimmed)) {
       Alert.alert('Check email format', 'Please enter a valid email address.');
       return;
     }
+
     await doSignIn(trimmed, password);
   };
 
   const showRecovery = () => {
     Alert.alert(
       'Reset your password',
-      `Email us at ${SUPPORT_EMAIL} from your registered email address and a fresh password will be issued for your account right away.`,
+      `Email us at ${SUPPORT_EMAIL} from your registered email address.`,
       [
         {
-          text: 'Email support',
-          onPress: () =>
+          text:'Email support',
+          onPress:()=> 
             Linking.openURL(
-              `mailto:${SUPPORT_EMAIL}?subject=AiForge password reset&body=Please reset the password for my AiForge account: ${email.trim() || '(your account email)'}`,
-            ).catch(() => {}),
+              `mailto:${SUPPORT_EMAIL}?subject=AiForge password reset`
+            ).catch(()=>{})
         },
-        { text: 'OK' },
-      ],
+        { text:'OK' }
+      ]
     );
   };
 
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [githubLoading, setGithubLoading] = useState(false);
-
   const onGoogleSignIn = async () => {
     setGoogleLoading(true);
+
     try {
-      const sid = await startGoogleSignIn();
-      if (sid) {
-        await signInWithOAuth(sid);
+      const firebaseToken = await startGoogleSignIn();
+
+      if (firebaseToken) {
+        await signInWithGoogle(firebaseToken);
         router.replace('/(tabs)');
       }
-    } catch (e: any) {
+
+    } catch(e:any) {
       Alert.alert(
         'Google sign-in failed',
-        e?.message || 'Could not complete Google sign-in. Please try again.',
+        e?.message || 'Could not complete Google sign-in. Please try again.'
       );
     } finally {
       setGoogleLoading(false);
     }
   };
 
-  const onGitHubSignIn = async () => {
-    setGithubLoading(true);
-    try {
-      const sid = await startGitHubSignIn();
-      if (sid) {
-        await signInWithOAuth(sid); // We reuse this as it just sends the SID to backend
-        router.replace('/(tabs)');
-      }
-    } catch (e: any) {
-      Alert.alert(
-        'GitHub sign-in failed',
-        e?.message || 'Could not complete GitHub sign-in. Please try again.',
-      );
-    } finally {
-      setGithubLoading(false);
-    }
+  const onGitHubSignIn = () => {
+    Alert.alert(
+      'Coming Soon',
+      'GitHub sign-in has not been connected yet.'
+    );
   };
 
   return (
     <View style={styles.root}>
+
       <StarryBackground />
       <GhostLogoBackground />
+
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
         >
-          <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+
+          <ScrollView
+            contentContainerStyle={styles.scroll}
+            keyboardShouldPersistTaps="handled"
+          >
+
             <View style={styles.header}>
               <PulsingLogo size={66} textSize={32} />
               <Text style={styles.tag}>AI-Powered Creation</Text>
             </View>
 
             <View style={styles.card}>
+
               <Text style={styles.title}>Welcome back</Text>
               <Text style={styles.sub}>Sign in to keep creating</Text>
 
@@ -167,7 +182,6 @@ export default function Login() {
                   autoCorrect={false}
                   spellCheck={false}
                   keyboardType="email-address"
-                  returnKeyType="next"
                   style={styles.input}
                 />
               </View>
@@ -184,7 +198,6 @@ export default function Login() {
                   autoCapitalize="none"
                   autoCorrect={false}
                   spellCheck={false}
-                  returnKeyType="go"
                   onSubmitEditing={onLogin}
                   style={styles.input}
                 />
@@ -195,21 +208,22 @@ export default function Login() {
                 onPress={onLogin}
                 loading={loading}
                 testID="login-submit"
-                style={{ marginTop: 18 }}
+                style={{ marginTop:18 }}
               />
 
               <View style={styles.divider}>
-                <View style={styles.dividerLine} />
+                <View style={styles.dividerLine}/>
                 <Text style={styles.dividerText}>OR</Text>
-                <View style={styles.dividerLine} />
+                <View style={styles.dividerLine}/>
               </View>
 
               <View style={styles.socialRow}>
+
                 <PressableScale
                   onPress={onGoogleSignIn}
                   disabled={googleLoading || githubLoading || loading}
+                  style={{flex:1}}
                   testID="google-signin"
-                  style={{ flex: 1 }}
                 >
                   <View style={styles.socialBtn}>
                     <View style={styles.googleBadge}>
@@ -224,120 +238,155 @@ export default function Login() {
                 <PressableScale
                   onPress={onGitHubSignIn}
                   disabled={googleLoading || githubLoading || loading}
+                  style={{flex:1}}
                   testID="github-signin"
-                  style={{ flex: 1 }}
                 >
                   <View style={styles.socialBtn}>
-                    <Github size={20} color={colors.text} />
-                    <Text style={styles.socialBtnText}>
-                      {githubLoading ? 'Wait…' : 'GitHub'}
-                    </Text>
+                    <GitBranch size={20} color={colors.text} />
+                    <Text style={styles.socialBtnText}>GitHub</Text>
                   </View>
                 </PressableScale>
+
               </View>
 
               <PressableScale
                 onPress={showRecovery}
-                style={{ marginTop: 14, alignSelf: 'center' }}
-                testID="forgot-password"
+                style={{ marginTop:14, alignSelf:'center' }}
               >
                 <Text style={styles.forgotText}>Forgot password?</Text>
               </PressableScale>
 
               <PressableScale
                 onPress={() => router.push('/(auth)/register')}
-                style={{ marginTop: 22 }}
+                style={{marginTop:22}}
               >
-                <Text style={styles.linkText} testID="goto-register">
-                  Don&apos;t have an account?{' '}
-                  <Text style={styles.linkAccent}>Create one</Text>
+                <Text style={styles.linkText}>
+                  Don't have an account?
+                  <Text style={styles.linkAccent}> Create one</Text>
                 </Text>
               </PressableScale>
+
             </View>
 
             <View style={styles.footer}>
               <LinearGradient
-                colors={[colors.cyan + '00', colors.cyan + '88', colors.cyan + '00']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={{ height: 1, width: '60%', marginBottom: 12 }}
+                colors={[
+                  colors.cyan + '00',
+                  colors.cyan + '88',
+                  colors.cyan + '00'
+                ]}
+                style={{
+                  height:1,
+                  width:'60%',
+                  marginBottom:12
+                }}
               />
-              <Text style={styles.footerText}>Forge intelligence. Forge art.</Text>
+              <Text style={styles.footerText}>
+                Forge intelligence. Forge art.
+              </Text>
             </View>
+
           </ScrollView>
+
         </KeyboardAvoidingView>
+
       </SafeAreaView>
+
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: 24, paddingBottom: 48, gap: 28 },
-  header: { alignItems: 'center', marginTop: 24, gap: 8 },
-  tag: { color: colors.cyan, fontWeight: '700', letterSpacing: 2, fontSize: 11, textTransform: 'uppercase' },
+  scroll: { padding: 24, paddingBottom: 80 },
+  header: { alignItems: 'center', marginBottom: 28 },
+  tag: { color: colors.textDim, marginTop: 6 },
   card: {
-    backgroundColor: 'rgba(10,10,20,0.7)',
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.xl,
-    padding: 24,
-    gap: 14,
+    backgroundColor: colors.card,
+    padding: 20,
+    borderRadius: radius.lg,
+    marginBottom: 40,
   },
-  title: { color: colors.text, fontSize: 26, fontWeight: '900', letterSpacing: -0.5 },
-  sub: { color: colors.textDim, fontSize: 14, marginBottom: 6 },
+  title: { fontSize: 24, fontWeight: '600', color: colors.text },
+  sub: { fontSize: 14, color: colors.textDim, marginBottom: 20 },
   field: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.input,
     borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 14,
-    height: 52,
-    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 14,
   },
-  input: { flex: 1, color: colors.text, fontSize: 15 },
-  linkText: { color: colors.textDim, textAlign: 'center', fontSize: 13 },
-  linkAccent: { color: colors.green, fontWeight: '700' },
-  forgotText: { color: colors.cyan, fontSize: 12, fontWeight: '800', letterSpacing: 0.4, textDecorationLine: 'underline' },
-  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16, marginBottom: 4 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
-  dividerText: { color: colors.textMuted, fontSize: 11, letterSpacing: 2, fontWeight: '700' },
-  googleBtn: {
+  input: {
+    flex: 1,
+    marginLeft: 10,
+    color: colors.text,
+    fontSize: 16,
+  },
+  divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: '#141420',
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    height: 52,
-    paddingHorizontal: 18,
+    marginVertical: 20,
   },
-  googleBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.textMuted,
   },
-  googleBadgeText: { color: '#4285F4', fontSize: 12, fontWeight: '900' },
-  socialRow: { flexDirection: 'row', gap: 12, marginTop: 4 },
+  dividerText: {
+    marginHorizontal: 10,
+    color: colors.textDim,
+  },
+  socialRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
   socialBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    backgroundColor: '#141420',
-    borderColor: colors.border,
-    borderWidth: 1,
+    backgroundColor: colors.input,
+    paddingVertical: 12,
     borderRadius: radius.md,
-    height: 52,
   },
-  socialBtnText: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  footer: { alignItems: 'center' },
-  footerText: { color: colors.textMuted, fontSize: 12, letterSpacing: 1 },
+  googleBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  googleBadgeText: {
+    fontWeight: '700',
+    color: '#4285F4',
+  },
+  socialBtnText: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  forgotText: {
+    color: colors.textDim,
+    fontSize: 14,
+  },
+  linkText: {
+    color: colors.textDim,
+    fontSize: 14,
+  },
+  linkAccent: {
+    color: colors.cyan,
+    fontWeight: '600',
+  },
+  footer: {
+    alignItems: 'center',
+    marginTop: 40,
+  },
+  footerText: {
+    color: colors.textDim,
+    fontSize: 13,
+  },
 });

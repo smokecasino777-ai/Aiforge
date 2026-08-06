@@ -17,7 +17,7 @@ import PulsingLogo from '@/src/components/Logo';
 import GradientButton from '@/src/components/GradientButton';
 import PressableScale from '@/src/components/PressableScale';
 import { colors, radius } from '@/src/theme/colors';
-import { Mail, Lock, User, Gift, Github } from 'lucide-react-native';
+import { Mail, Lock, User, Gift, GitBranch } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { startGoogleSignIn, startGitHubSignIn } from '@/src/utils/googleAuth';
 
@@ -33,12 +33,10 @@ export default function Register() {
   const [referral, setReferral] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Pre-fill email when forwarded from login (e.g. "Create account" button).
   useEffect(() => {
     if (typeof params.email === 'string' && params.email && !email) {
       setEmail(params.email);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.email]);
 
   const onRegister = async () => {
@@ -239,7 +237,7 @@ export default function Register() {
                   style={{ flex: 1 }}
                 >
                   <View style={styles.socialBtn}>
-                    <Github size={20} color={colors.text} />
+                    <GitBranch size={20} color={colors.text} />
                     <Text style={styles.socialBtnText}>
                       {githubLoading ? 'Wait…' : 'GitHub'}
                     </Text>

@@ -88,12 +88,14 @@ export const api = {
       body: JSON.stringify({ email, password }),
     });
   },
-  async oAuth(sessionId: string) {
-    return request<{ token: string; user: User }>('/auth/google', {
-      method: 'POST',
-      body: JSON.stringify({ session_id: sessionId }),
-    });
-  },
+ async googleAuth(firebaseToken: string) {
+  return request<{ token: string; user: User }>('/auth/google', {
+    method: 'POST',
+    body: JSON.stringify({
+      firebase_token: firebaseToken,
+    }),
+  });
+},
   async me() {
     return request<User>('/auth/me');
   },
