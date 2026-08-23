@@ -88,14 +88,6 @@ export const api = {
       body: JSON.stringify({ email, password }),
     });
   },
- async googleAuth(firebaseToken: string) {
-  return request<{ token: string; user: User }>('/auth/google', {
-    method: 'POST',
-    body: JSON.stringify({
-      firebase_token: firebaseToken,
-    }),
-  });
-},
   async me() {
     return request<User>('/auth/me');
   },
@@ -197,14 +189,6 @@ export const api = {
       is_live: boolean;
     }>('/admin/stripe-key');
   },
-  async adminGetHealth() {
-    return request<{
-      llm_key: string;
-      llm_status: string;
-      llm_error?: string;
-      stripe_status: string;
-    }>('/admin/health');
-  },
   async adminSetStripeKey(key: string) {
     return request<{
       ok: boolean;
@@ -245,16 +229,6 @@ export const api = {
         body: JSON.stringify({ email, new_password: newPassword }),
       },
     );
-  },
-  // ---- Git (owner-only) ----
-  async gitStatus() {
-    return request<{ status: string; last_commit: string; branch: string }>('/admin/git/status');
-  },
-  async gitPull() {
-    return request<{ output: string }>('/admin/git/pull', { method: 'POST' });
-  },
-  async gitPush() {
-    return request<{ output: string }>('/admin/git/push', { method: 'POST' });
   },
   // ---- Editor (AI image / video edit) ----
   async editorEnhance(image_b64: string) {

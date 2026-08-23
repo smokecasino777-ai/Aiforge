@@ -13,7 +13,7 @@ import {
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft, Lock, ShieldCheck, AlertTriangle, KeyRound, Eye, EyeOff, RotateCcw, ExternalLink, UserCog, Search, GitBranch, Download, Upload } from 'lucide-react-native';
+import { ArrowLeft, Lock, ShieldCheck, AlertTriangle, KeyRound, Eye, EyeOff, RotateCcw, ExternalLink, UserCog, Search } from 'lucide-react-native';
 import StarryBackground from '@/src/components/StarryBackground';
 import GradientButton from '@/src/components/GradientButton';
 import PressableScale from '@/src/components/PressableScale';
@@ -66,14 +66,18 @@ export default function AdminSecrets() {
   const [unlocking, setUnlocking] = useState(false);
   const [unlockError, setUnlockError] = useState<string | null>(null);
 
-  // ----- git state -----
-  const [gitInfo, setGitInfo] = useState<{ status: string; last_commit: string; branch: string } | null>(null);
-  const [gitLoading, setGitLoading] = useState(false);
-  const [gitOutput, setGitOutput] = useState('');
-  const [health, setHealth] = useState<{ llm_status: string; llm_error?: string } | null>(null);
-
   useEffect(() => {
-    // ...
+    (async () => {
+      try {
+        const me = await api.adminMe();
+        setIsAdmin(me.is_admin);
+      } catch {
+        setIsAdmin(false);
+      }
+      setLoading(false);
+    })();
+    // Relock when leaving the page — the sudo token never persists.
+    return () => setAdminUnlockToken(null);
   }, []);
 
   const loadSecrets = async () => {
@@ -82,29 +86,8 @@ export default function AdminSecrets() {
       setStatus(s);
       const u = await api.adminListUsers();
       setUsers(u.users || []);
-      const g = await api.gitStatus();
-      setGitInfo(g);
-      const h = await api.adminGetHealth();
-      setHealth(h);
     } catch {
       /* silent — sections load lazily */
-    }
-  };
-
-  const onGitAction = async (action: 'pull' | 'push') => {
-    setGitLoading(true);
-    setGitOutput('');
-    try {
-      const res = action === 'pull' ? await api.gitPull() : await api.gitPush();
-      setGitOutput(res.output);
-      const g = await api.gitStatus();
-      setGitInfo(g);
-      Alert.alert('Git Success', `Action ${action} completed.`);
-    } catch (e: any) {
-      setGitOutput(e.message);
-      Alert.alert('Git Error', e.message);
-    } finally {
-      setGitLoading(false);
     }
   };
 
@@ -337,20 +320,6 @@ export default function AdminSecrets() {
           <Text style={styles.title}>App Secrets</Text>
           <Text style={styles.subtitle}>Manage your Stripe API key securely — never paste it in chat.</Text>
 
-          {/* Health check card */}
-          <View style={[styles.card, { borderColor: health?.llm_status === 'ok' ? colors.green + '66' : colors.red + '66' }]}>
-            <View style={styles.row}>
-              <ShieldCheck size={20} color={health?.llm_status === 'ok' ? colors.green : colors.red} />
-              <Text style={styles.cardTitle}>Emergent AI Health</Text>
-              <View style={[styles.modeBadge, { backgroundColor: (health?.llm_status === 'ok' ? colors.green : colors.red) + '22', borderColor: health?.llm_status === 'ok' ? colors.green : colors.red }]}>
-                <Text style={[styles.modeBadgeText, { color: health?.llm_status === 'ok' ? colors.green : colors.red }]}>
-                  {health?.llm_status?.toUpperCase() || 'LOADING…'}
-                </Text>
-              </View>
-            </View>
-            {health?.llm_error ? <Text style={styles.errText}>{health.llm_error}</Text> : null}
-          </View>
-
           {/* Status card */}
           <View style={[styles.card, { borderColor: modeColor + '66' }]}>
             <View style={styles.row}>
@@ -446,52 +415,6 @@ export default function AdminSecrets() {
             testID="reset-stripe-key"
             small
           />
-
-          {/* ------ Git Controls (owner-only) ------ */}
-          <View style={{ height: 22 }} />
-          <View style={styles.row}>
-            <GitBranch size={20} color={colors.cyan} />
-            <Text style={[styles.cardTitle, { fontSize: 18 }]}>Git Synchronization</Text>
-          </View>
-          <Text style={[styles.subtitle, { marginTop: -4 }]}>
-            Push and Pull changes directly from the app to keep Emergent in sync.
-          </Text>
-
-          <View style={[styles.card, { borderColor: colors.cyan + '55' }]}>
-            <View style={styles.row}>
-              <Text style={styles.kvKey}>Branch: </Text>
-              <Text style={styles.kvVal}>{gitInfo?.branch || '—'}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text style={styles.kvKey}>Last: </Text>
-              <Text style={styles.kvVal} numberOfLines={1}>{gitInfo?.last_commit || '—'}</Text>
-            </View>
-
-            <View style={[styles.row, { marginTop: 8 }]}>
-              <GradientButton
-                title="Git Pull"
-                onPress={() => onGitAction('pull')}
-                loading={gitLoading}
-                icon={<Download size={14} color="#000" />}
-                small
-                style={{ flex: 1 }}
-              />
-              <GradientButton
-                title="Git Push"
-                onPress={() => onGitAction('push')}
-                loading={gitLoading}
-                icon={<Upload size={14} color="#000" />}
-                small
-                style={{ flex: 1 }}
-              />
-            </View>
-
-            {!!gitOutput && (
-              <View style={styles.gitOutputBox}>
-                <Text style={styles.gitOutputText}>{gitOutput}</Text>
-              </View>
-            )}
-          </View>
 
           {/* ------ Reset User Password (admin-only recovery flow) ------ */}
           <View style={{ height: 22 }} />
@@ -711,16 +634,4 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   planTagText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
-  gitOutputBox: {
-    backgroundColor: '#000',
-    padding: 10,
-    borderRadius: radius.md,
-    marginTop: 10,
-    maxHeight: 150,
-  },
-  gitOutputText: {
-    color: colors.green,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: 10,
-  },
 });

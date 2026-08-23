@@ -20,7 +20,6 @@ type AuthCtx = {
     name?: string,
     referralCode?: string
   ) => Promise<void>;
-  signInWithGoogle: (firebaseToken: string) => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -124,26 +123,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 
 
-  const signInWithGoogle = useCallback(
-    async(firebaseToken:string)=>{
-
-
-      const r =
-        await api.googleAuth(firebaseToken);
-
-
-      await api.setToken(r.token);
-
-      setUser(r.user);
-
-
-    },
-    []
-  );
-
-
-
-
   const signOut = useCallback(async()=>{
 
     await api.clearToken();
@@ -160,7 +139,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       signIn,
       signUp,
-      signInWithGoogle,
       signOut,
       refresh
     }),
@@ -169,7 +147,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       signIn,
       signUp,
-      signInWithGoogle,
       signOut,
       refresh
     ]

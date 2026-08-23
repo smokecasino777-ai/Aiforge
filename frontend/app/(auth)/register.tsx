@@ -17,16 +17,15 @@ import PulsingLogo from '@/src/components/Logo';
 import GradientButton from '@/src/components/GradientButton';
 import PressableScale from '@/src/components/PressableScale';
 import { colors, radius } from '@/src/theme/colors';
-import { Mail, Lock, User, Gift, GitBranch } from 'lucide-react-native';
+import { Mail, Lock, User, Gift } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { startGoogleSignIn, startGitHubSignIn } from '@/src/utils/googleAuth';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function Register() {
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string }>();
-  const { signUp, signInWithOAuth } = useAuth();
+  const { signUp } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -89,45 +88,6 @@ export default function Register() {
       }
     } finally {
       setLoading(false);
-    }
-  };
-
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [githubLoading, setGithubLoading] = useState(false);
-
-  const onGoogleSignIn = async () => {
-    setGoogleLoading(true);
-    try {
-      const sid = await startGoogleSignIn();
-      if (sid) {
-        await signInWithOAuth(sid);
-        router.replace('/(tabs)');
-      }
-    } catch (e: any) {
-      Alert.alert(
-        'Google sign-in failed',
-        e?.message || 'Could not complete Google sign-in. Please try again.',
-      );
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
-
-  const onGitHubSignIn = async () => {
-    setGithubLoading(true);
-    try {
-      const sid = await startGitHubSignIn();
-      if (sid) {
-        await signInWithOAuth(sid);
-        router.replace('/(tabs)');
-      }
-    } catch (e: any) {
-      Alert.alert(
-        'GitHub sign-in failed',
-        e?.message || 'Could not complete GitHub sign-in. Please try again.',
-      );
-    } finally {
-      setGithubLoading(false);
     }
   };
 
@@ -207,44 +167,6 @@ export default function Register() {
                 style={{ marginTop: 18 }}
               />
 
-              <View style={styles.divider}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>OR</Text>
-                <View style={styles.dividerLine} />
-              </View>
-
-              <View style={styles.socialRow}>
-                <PressableScale
-                  onPress={onGoogleSignIn}
-                  disabled={googleLoading || githubLoading || loading}
-                  testID="register-google"
-                  style={{ flex: 1 }}
-                >
-                  <View style={styles.socialBtn}>
-                    <View style={styles.googleBadge}>
-                      <Text style={styles.googleBadgeText}>G</Text>
-                    </View>
-                    <Text style={styles.socialBtnText}>
-                      {googleLoading ? 'Wait…' : 'Google'}
-                    </Text>
-                  </View>
-                </PressableScale>
-
-                <PressableScale
-                  onPress={onGitHubSignIn}
-                  disabled={googleLoading || githubLoading || loading}
-                  testID="register-github"
-                  style={{ flex: 1 }}
-                >
-                  <View style={styles.socialBtn}>
-                    <GitBranch size={20} color={colors.text} />
-                    <Text style={styles.socialBtnText}>
-                      {githubLoading ? 'Wait…' : 'GitHub'}
-                    </Text>
-                  </View>
-                </PressableScale>
-              </View>
-
               <PressableScale onPress={() => router.back()} style={{ marginTop: 22 }}>
                 <Text style={styles.linkText} testID="goto-login">
                   Already have an account? <Text style={styles.linkAccent}>Sign in</Text>
@@ -287,29 +209,4 @@ const styles = StyleSheet.create({
   input: { flex: 1, color: colors.text, fontSize: 15 },
   linkText: { color: colors.textDim, textAlign: 'center', fontSize: 13 },
   linkAccent: { color: colors.cyan, fontWeight: '700' },
-  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16, marginBottom: 4 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
-  dividerText: { color: colors.textMuted, fontSize: 11, letterSpacing: 2, fontWeight: '700' },
-  googleBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  googleBadgeText: { color: '#4285F4', fontSize: 12, fontWeight: '900' },
-  socialRow: { flexDirection: 'row', gap: 12, marginTop: 4 },
-  socialBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: '#141420',
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    height: 52,
-  },
-  socialBtnText: { color: colors.text, fontSize: 15, fontWeight: '700' },
 });

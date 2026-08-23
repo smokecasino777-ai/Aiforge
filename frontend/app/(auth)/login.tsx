@@ -23,10 +23,8 @@ import GradientButton from '@/src/components/GradientButton';
 import PressableScale from '@/src/components/PressableScale';
 
 import { colors, radius } from '@/src/theme/colors';
-import { Mail, Lock, GitBranch } from 'lucide-react-native';
+import { Mail, Lock } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-import { startGoogleSignIn } from '@/src/utils/googleAuth';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SUPPORT_EMAIL = 'jraycwalker@gmail.com';
@@ -38,17 +36,12 @@ export default function Login() {
 
   const {
     signIn,
-    signInWithGoogle,
   } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
-
-  // GitHub is disabled → no need for useState
-  const githubLoading = false;
 
   useEffect(() => {
     if (
@@ -111,34 +104,6 @@ export default function Login() {
         },
         { text:'OK' }
       ]
-    );
-  };
-
-  const onGoogleSignIn = async () => {
-    setGoogleLoading(true);
-
-    try {
-      const firebaseToken = await startGoogleSignIn();
-
-      if (firebaseToken) {
-        await signInWithGoogle(firebaseToken);
-        router.replace('/(tabs)');
-      }
-
-    } catch(e:any) {
-      Alert.alert(
-        'Google sign-in failed',
-        e?.message || 'Could not complete Google sign-in. Please try again.'
-      );
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
-
-  const onGitHubSignIn = () => {
-    Alert.alert(
-      'Coming Soon',
-      'GitHub sign-in has not been connected yet.'
     );
   };
 
@@ -211,44 +176,6 @@ export default function Login() {
                 style={{ marginTop:18 }}
               />
 
-              <View style={styles.divider}>
-                <View style={styles.dividerLine}/>
-                <Text style={styles.dividerText}>OR</Text>
-                <View style={styles.dividerLine}/>
-              </View>
-
-              <View style={styles.socialRow}>
-
-                <PressableScale
-                  onPress={onGoogleSignIn}
-                  disabled={googleLoading || githubLoading || loading}
-                  style={{flex:1}}
-                  testID="google-signin"
-                >
-                  <View style={styles.socialBtn}>
-                    <View style={styles.googleBadge}>
-                      <Text style={styles.googleBadgeText}>G</Text>
-                    </View>
-                    <Text style={styles.socialBtnText}>
-                      {googleLoading ? 'Wait…' : 'Google'}
-                    </Text>
-                  </View>
-                </PressableScale>
-
-                <PressableScale
-                  onPress={onGitHubSignIn}
-                  disabled={googleLoading || githubLoading || loading}
-                  style={{flex:1}}
-                  testID="github-signin"
-                >
-                  <View style={styles.socialBtn}>
-                    <GitBranch size={20} color={colors.text} />
-                    <Text style={styles.socialBtnText}>GitHub</Text>
-                  </View>
-                </PressableScale>
-
-              </View>
-
               <PressableScale
                 onPress={showRecovery}
                 style={{ marginTop:14, alignSelf:'center' }}
@@ -261,7 +188,7 @@ export default function Login() {
                 style={{marginTop:22}}
               >
                 <Text style={styles.linkText}>
-                  Don't have an account?
+                  Don&apos;t have an account?
                   <Text style={styles.linkAccent}> Create one</Text>
                 </Text>
               </PressableScale>
@@ -302,7 +229,9 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center', marginBottom: 28 },
   tag: { color: colors.textDim, marginTop: 6 },
   card: {
-    backgroundColor: colors.card,
+    backgroundColor: 'rgba(10,10,20,0.7)',
+    borderColor: colors.border,
+    borderWidth: 1,
     padding: 20,
     borderRadius: radius.lg,
     marginBottom: 40,
@@ -312,7 +241,9 @@ const styles = StyleSheet.create({
   field: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.input,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
     borderRadius: radius.md,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -323,51 +254,6 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     color: colors.text,
     fontSize: 16,
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 20,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.textMuted,
-  },
-  dividerText: {
-    marginHorizontal: 10,
-    color: colors.textDim,
-  },
-  socialRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
-  },
-  socialBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.input,
-    paddingVertical: 12,
-    borderRadius: radius.md,
-  },
-  googleBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
-  googleBadgeText: {
-    fontWeight: '700',
-    color: '#4285F4',
-  },
-  socialBtnText: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '500',
   },
   forgotText: {
     color: colors.textDim,

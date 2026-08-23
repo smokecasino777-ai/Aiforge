@@ -13,7 +13,6 @@ from pydantic import BaseModel, EmailStr
 
 from core import (
     RUNTIME,
-    EMERGENT_LLM_KEY,
     current_stripe_key,
     db,
     ensure_admin,
@@ -51,37 +50,6 @@ def ensure_sudo(user: dict, x_admin_unlock: Optional[str]) -> None:
             status_code=403,
             detail="Admin panel is locked. Re-enter your admin password to unlock.",
         )
-
-
-@router.get("/admin/health")
-async def admin_health(
-    user: dict = Depends(get_current_user),
-    x_admin_unlock: Optional[str] = Header(None, alias="X-Admin-Unlock"),
-):
-    await ensure_admin(user)
-    ensure_sudo(user, x_admin_unlock)
-
-    # Test LLM key
-    llm_ok = False
-    llm_err = None
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id="health-check").with_model(
-            "anthropic", "claude-sonnet-4-6"
-        )
-        await chat.send_message(UserMessage(text="hi"))
-        llm_ok = True
-    except Exception as e:
-        llm_err = str(e)
-
-    return {
-        "llm_key": "sk_test_emergent"
-        if EMERGENT_LLM_KEY == "sk_test_emergent"
-        else "custom",
-        "llm_status": "ok" if llm_ok else "error",
-        "llm_error": llm_err,
-        "stripe_status": stripe_mode_of(current_stripe_key()),
-    }
 
 
 @router.post("/admin/unlock")
