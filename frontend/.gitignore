@@ -31,7 +31,7 @@ yarn-error.*
 *.pem
 
 # local env files
-.env*.local
+# (intentionally not excluding .env* — Emergent deployment rewrites them)
 
 # typescript
 *.tsbuildinfo

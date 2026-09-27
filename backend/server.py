@@ -26,6 +26,12 @@ async def root_health():
     return {"status": "ok", "service": "AiForge API"}
 
 
+@app.get("/health")
+async def health():
+    """Kubernetes/EAS liveness probe path — must return 200."""
+    return {"status": "ok", "service": "AiForge API"}
+
+
 # ----- Health -----
 @api.get("/")
 async def root():
