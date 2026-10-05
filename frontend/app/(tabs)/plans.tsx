@@ -49,10 +49,11 @@ export default function Plans() {
     if (planId === 'free' || planId === user?.plan) return;
     setBusy(planId);
     try {
-      // On web, use the live origin so Stripe redirects back to whatever host
-      // the user is on (works for preview, production, custom domains, …).
-      // On native, fall back to the publicly-reachable backend URL which is
-      // also the host serving the web app on Emergent.
+      // Stripe hosted checkout only accepts https success/cancel URLs, so we
+      // always route redirects through the public web host of the backend.
+      // On web → full-page redirect. On native → open the hosted page in an
+      // in-app browser; when the browser closes (success or dismiss) we poll
+      // the backend to get authoritative payment status from Stripe.
       const liveOrigin =
         typeof window !== 'undefined' && window.location?.origin
           ? window.location.origin
@@ -62,12 +63,12 @@ export default function Plans() {
       if (Platform.OS === 'web') {
         if (typeof window !== 'undefined') window.location.href = res.url;
       } else {
-        const r = await WebBrowser.openAuthSessionAsync(res.url, origin);
-        if (r.type === 'success') {
-          // poll status to upgrade plan
-          await pollStatus(res.session_id);
-          await refresh();
-        }
+        // openBrowserAsync is correct for payment flows (not an OAuth session).
+        // After it resolves we poll regardless of outcome, since Stripe is the
+        // authoritative source of truth for whether the user actually paid.
+        await WebBrowser.openBrowserAsync(res.url);
+        await pollStatus(res.session_id);
+        await refresh();
       }
     } catch (e: any) {
       Alert.alert('Checkout failed', e.message);

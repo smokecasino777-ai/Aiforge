@@ -35,6 +35,12 @@ JWT_EXP_DAYS = 7
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "sk_test_emergent")
 ADMIN_EMAIL = (os.environ.get("ADMIN_EMAIL") or "").lower().strip()
 
+# Public URL where this backend is reachable from the public internet. Stripe
+# webhooks MUST hit a stable https backend URL, so we never trust a
+# client-supplied origin for webhook_url. Falls back to None, in which case the
+# checkout route derives it from the incoming request's host header.
+BACKEND_PUBLIC_URL = (os.environ.get("BACKEND_PUBLIC_URL") or "").rstrip("/")
+
 # Runtime container so /api/admin endpoints can hot-swap the live Stripe key
 # without restarting the backend.
 RUNTIME = {

@@ -9,6 +9,7 @@ from emergentintegrations.payments.stripe.checkout import (
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from core import (
+    BACKEND_PUBLIC_URL,
     PLAN_LIMITS,
     PLAN_PRICES,
     current_stripe_key,
@@ -112,7 +113,9 @@ async def plans_list():
 
 @router.post("/checkout/create", response_model=CheckoutResponse)
 async def create_checkout(
-    req: CheckoutRequest, user: dict = Depends(get_current_user)
+    req: CheckoutRequest,
+    request: Request,
+    user: dict = Depends(get_current_user),
 ):
     amount = PLAN_PRICES.get(req.plan)
     if amount is None:
@@ -120,7 +123,12 @@ async def create_checkout(
     origin = req.origin_url.rstrip("/")
     success_url = f"{origin}/payment/success?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{origin}/payment/cancel"
-    webhook_url = f"{origin}/api/webhook/stripe"
+    # Stripe webhooks must land on a stable https backend URL. NEVER trust the
+    # client-supplied origin for webhook_url (native apps pass app deep links
+    # which Stripe can't reach). Prefer BACKEND_PUBLIC_URL env, else derive
+    # from the incoming request's host header.
+    backend_base = BACKEND_PUBLIC_URL or str(request.base_url).rstrip("/")
+    webhook_url = f"{backend_base}/api/webhook/stripe"
     sc = StripeCheckout(api_key=current_stripe_key(), webhook_url=webhook_url)
     sess_req = CheckoutSessionRequest(
         amount=amount,
