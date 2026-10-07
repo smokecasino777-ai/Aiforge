@@ -17,6 +17,8 @@ from dotenv import load_dotenv
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorClient
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 ROOT_DIR = Path(__file__).parent
 # IMPORTANT: do NOT pass override=True here. In production (Kubernetes), real
@@ -29,11 +31,30 @@ load_dotenv(ROOT_DIR / ".env", override=False)
 MONGO_URL = os.environ["MONGO_URL"]
 DB_NAME = os.environ["DB_NAME"]
 EMERGENT_LLM_KEY = os.environ["EMERGENT_LLM_KEY"]
-JWT_SECRET = os.environ.get("JWT_SECRET", "aiforge-secret-change-me")
+# JWT_SECRET MUST be provided by env. We refuse to boot with a predictable
+# default — otherwise anyone who read our source could forge admin tokens.
+JWT_SECRET = os.environ.get("JWT_SECRET") or ""
+if not JWT_SECRET or JWT_SECRET == "aiforge-secret-change-me":
+    raise RuntimeError(
+        "JWT_SECRET env var is missing or set to the insecure default. "
+        "Set a strong random value (e.g. `openssl rand -hex 32`) before boot."
+    )
 JWT_ALG = "HS256"
 JWT_EXP_DAYS = 7
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "sk_test_emergent")
+# Stripe webhook signing secret from the Stripe dashboard (whsec_...). When
+# set, every webhook body is verified; when unset, the webhook endpoint
+# ACCEPTS NO plan updates — fail secure. Only matters once a real
+# sk_live_/sk_test_ key is in use; the Emergent sandbox proxy
+# (sk_test_emergent) never issues real webhooks.
+STRIPE_WEBHOOK_SECRET = (os.environ.get("STRIPE_WEBHOOK_SECRET") or "").strip()
 ADMIN_EMAIL = (os.environ.get("ADMIN_EMAIL") or "").lower().strip()
+# "production" | "preview" | "development" — controls docs exposure, CORS, etc.
+APP_ENV = (os.environ.get("APP_ENV") or "preview").lower().strip()
+# Comma-separated allowlist for CORS. Mobile apps don't need CORS; the web
+# preview build + Emergent custom domain do.
+_cors_raw = (os.environ.get("CORS_ORIGINS") or "").strip()
+CORS_ORIGINS = [o.strip() for o in _cors_raw.split(",") if o.strip()]
 
 # Public URL where this backend is reachable from the public internet. Stripe
 # webhooks MUST hit a stable https backend URL, so we never trust a
@@ -184,6 +205,20 @@ PLAN_NAMES = {
 # ----- HTTP security -----
 security = HTTPBearer(auto_error=False)
 
+# ----- Rate limiter -----
+# Keyed by client IP. Behind an ingress/LB (K8s, Emergent) the direct peer IP
+# is the proxy, so we check X-Forwarded-For first (ingress-controlled, trusted
+# on this platform). Falls back to the direct peer IP for local dev.
+def _rate_limit_key(request) -> str:  # noqa: ANN001 — fastapi.Request
+    xff = (request.headers.get("x-forwarded-for") or "").split(",")
+    first = xff[0].strip() if xff else ""
+    if first:
+        return first
+    return get_remote_address(request)
+
+
+limiter = Limiter(key_func=_rate_limit_key)
+
 
 # ----- Time helpers -----
 def now_utc() -> datetime:
@@ -198,7 +233,14 @@ def iso(dt: datetime) -> str:
 
 # ----- JWT helpers -----
 def make_token(user_id: str) -> str:
-    payload = {"sub": user_id, "exp": now_utc() + timedelta(days=JWT_EXP_DAYS)}
+    now = now_utc()
+    payload = {
+        "sub": user_id,
+        # `iat` lets us revoke tokens by writing `password_changed_at` on the
+        # user doc (see get_current_user). Older tokens are then rejected.
+        "iat": int(now.timestamp()),
+        "exp": now + timedelta(days=JWT_EXP_DAYS),
+    }
     return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
 
 
@@ -211,11 +253,28 @@ async def get_current_user(
     try:
         payload = pyjwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
         user_id = payload["sub"]
+        issued_at = int(payload.get("iat") or 0)
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
     user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    # If the owner (or the user via self-serve) ever reset the password,
+    # tokens issued BEFORE that moment must be invalidated.
+    changed_at = user.get("password_changed_at")
+    if changed_at:
+        try:
+            changed_ts = int(datetime.fromisoformat(changed_at).timestamp())
+            if issued_at < changed_ts:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Session expired after password change. Please sign in again.",
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            # Malformed timestamp — fail safe (reject).
+            raise HTTPException(status_code=401, detail="Invalid session.")
     return user
 
 

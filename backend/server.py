@@ -4,7 +4,9 @@ All route logic lives in `routes/*.py`. Shared config, DB handles, JWT,
 admin helpers and Stripe-key utilities live in `core.py`. Pydantic models
 live in `models.py`.
 """
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Request
+from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 from starlette.middleware.cors import CORSMiddleware
 
 import os
@@ -12,11 +14,45 @@ import uuid
 
 import bcrypt
 
-from core import ADMIN_EMAIL, db, iso, logger, make_referral_code, mongo_client, now_utc, select_authorized_db
+from core import (
+    ADMIN_EMAIL,
+    APP_ENV,
+    CORS_ORIGINS,
+    db,
+    iso,
+    limiter,
+    logger,
+    make_referral_code,
+    mongo_client,
+    now_utc,
+    select_authorized_db,
+)
 from routes import admin, assets, auth, avatar, checkout, editor, generation, legal, referrals
 
 # AiForge API - Triggering deployment
-app = FastAPI(title="AiForge API")
+# In production, hide the admin API surface from drive-by probes.
+_IS_PROD = APP_ENV == "production"
+app = FastAPI(
+    title="AiForge API",
+    docs_url=None if _IS_PROD else "/docs",
+    redoc_url=None if _IS_PROD else "/redoc",
+    openapi_url=None if _IS_PROD else "/openapi.json",
+)
+
+# Rate limiter (slowapi) — attached before any routes mount.
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={
+            "detail": "Too many requests. Please slow down and try again shortly."
+        },
+    )
+
+
 api = APIRouter(prefix="/api")
 
 
@@ -141,10 +177,26 @@ async def on_shutdown():
 
 app.include_router(api)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS — mobile apps don't need CORS, but the web preview + Emergent custom
+# domain do. In production we require an explicit allowlist via CORS_ORIGINS;
+# in preview/dev we fall back to a permissive config so the live preview
+# panel works out of the box.
+if _IS_PROD and CORS_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_credentials=True,
+        allow_origins=CORS_ORIGINS,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    # Preview / dev: wildcard origins. The combo with allow_credentials=True
+    # is a no-op per the CORS spec, so we explicitly disable credentials to
+    # avoid any implementation surprises.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_credentials=False,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )

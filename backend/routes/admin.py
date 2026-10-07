@@ -8,7 +8,7 @@ admin session token leaks.
 from typing import Optional
 
 import bcrypt
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 
 from core import (
@@ -19,6 +19,7 @@ from core import (
     get_current_user,
     iso,
     key_fingerprint,
+    limiter,
     logger,
     make_sudo_token,
     now_utc,
@@ -53,8 +54,11 @@ def ensure_sudo(user: dict, x_admin_unlock: Optional[str]) -> None:
 
 
 @router.post("/admin/unlock")
+@limiter.limit("5/minute;20/hour")
 async def admin_unlock(
-    req: AdminUnlockRequest, user: dict = Depends(get_current_user)
+    request: Request,
+    req: AdminUnlockRequest,
+    user: dict = Depends(get_current_user),
 ):
     """Re-authenticate the admin to mint a 15-minute sudo token."""
     await ensure_admin(user)
@@ -199,9 +203,9 @@ async def admin_reset_user_password(
     ensure_sudo(user, x_admin_unlock)
     email = req.email.lower().strip()
     pw = (req.new_password or "").strip()
-    if len(pw) < 6:
+    if len(pw) < 8:
         raise HTTPException(
-            status_code=400, detail="New password must be at least 6 characters"
+            status_code=400, detail="New password must be at least 8 characters"
         )
     target = await db.users.find_one(
         {"email": email}, {"_id": 0, "user_id": 1, "auth_provider": 1}
@@ -214,11 +218,22 @@ async def admin_reset_user_password(
             detail="That account is Google-only; cannot reset email/password.",
         )
     new_hash = bcrypt.hashpw(pw.encode(), bcrypt.gensalt()).decode()
+    now_iso = iso(now_utc())
     await db.users.update_one(
         {"user_id": target["user_id"]},
-        {"$set": {"password_hash": new_hash, "password_reset_at": iso(now_utc())}},
+        {
+            "$set": {
+                "password_hash": new_hash,
+                # BOTH fields: `password_changed_at` is checked by
+                # get_current_user to revoke every previously issued JWT for
+                # this user. `password_reset_at` is kept for backward-compat
+                # audit logging.
+                "password_changed_at": now_iso,
+                "password_reset_at": now_iso,
+            }
+        },
     )
     logger.info(
         f"Admin {user.get('email')} reset password for {email} (user_id={target['user_id']})"
     )
-    return {"ok": True, "email": email, "message": "Password updated."}
+    return {"ok": True, "email": email, "message": "Password updated. The user's existing sessions have been invalidated."}

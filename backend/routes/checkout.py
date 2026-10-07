@@ -1,5 +1,4 @@
 """Plans + Stripe checkout + webhook."""
-from datetime import datetime, timedelta
 from typing import Optional
 
 from emergentintegrations.payments.stripe.checkout import (
@@ -12,6 +11,7 @@ from core import (
     BACKEND_PUBLIC_URL,
     PLAN_LIMITS,
     PLAN_PRICES,
+    STRIPE_WEBHOOK_SECRET,
     current_stripe_key,
     db,
     get_current_user,
@@ -190,30 +190,11 @@ async def checkout_status(
     except Exception as e:
         logger.warning(f"Stripe status lookup failed for {session_id}: {e}")
 
+    # SECURITY: Only Stripe is authoritative. We do NOT trust the browser
+    # redirect, the "recent" timestamp, or the owner match. If Stripe cannot
+    # confirm payment, the plan stays as-is. The webhook (verified by signing
+    # secret) is the only other path that can mark a session paid.
     paid = stripe_payment_status == "paid"
-
-    # Sandbox fallback: in sk_test_emergent mode, Stripe proxy cannot retrieve
-    # session state, but our success-URL redirect carries the session_id only
-    # AFTER Stripe confirms payment. Accept that as authoritative when:
-    #  - session is recent (< 2h)
-    #  - belongs to the authed user (matched above)
-    #  - we are explicitly on the sandbox key (NEVER trusted with sk_live_).
-    if (
-        not paid
-        and stripe_payment_status is None
-        and current_stripe_key() == "sk_test_emergent"
-    ):
-        try:
-            created = datetime.fromisoformat(pay["created_at"])
-            if now_utc() - created < timedelta(hours=2):
-                logger.info(
-                    f"Stripe lookup unavailable for {session_id}; trusting redirect since session is recent and belongs to authed user."
-                )
-                paid = True
-                stripe_status = "complete"
-                stripe_payment_status = "paid"
-        except Exception:
-            pass
 
     if paid:
         await db.users.update_one(
@@ -245,30 +226,79 @@ async def checkout_status(
 async def stripe_webhook(
     request: Request, stripe_signature: Optional[str] = Header(None)
 ):
+    """Stripe webhook — authoritative source for plan upgrades.
+
+    SECURITY: We require a webhook signing secret (`STRIPE_WEBHOOK_SECRET`
+    from Stripe dashboard). Without it, no plan upgrades happen — fail
+    secure. This blocks the "anonymous attacker forges a webhook" attack.
+    """
     body = await request.body()
-    sc = StripeCheckout(api_key=current_stripe_key())
+
+    if not STRIPE_WEBHOOK_SECRET:
+        # Not configured yet. We ACK so Stripe doesn't retry forever, but we
+        # do NOT touch any plan. The owner must set STRIPE_WEBHOOK_SECRET
+        # before paid upgrades will work via webhook.
+        logger.error(
+            "Stripe webhook received but STRIPE_WEBHOOK_SECRET is not set — "
+            "ignoring event. Set it from the Stripe dashboard."
+        )
+        return {"received": True, "verified": False}
+
+    if not stripe_signature:
+        logger.warning("Stripe webhook missing Stripe-Signature header; rejecting.")
+        raise HTTPException(status_code=400, detail="Missing signature")
+
+    sc = StripeCheckout(
+        api_key=current_stripe_key(),
+        webhook_secret=STRIPE_WEBHOOK_SECRET,
+    )
     try:
-        event = await sc.handle_webhook(body, stripe_signature or "")
+        event = await sc.handle_webhook(body, stripe_signature)
     except Exception as e:
-        logger.warning(f"Webhook parse failed: {e}")
-        return {"received": True}
+        logger.warning(f"Stripe webhook signature verification failed: {e}")
+        raise HTTPException(status_code=400, detail="Invalid signature")
+
     md = event.metadata or {}
     user_id = md.get("user_id")
     plan = md.get("plan")
-    if event.payment_status == "paid" and user_id and plan:
-        await db.users.update_one(
-            {"user_id": user_id},
-            {"$set": {"plan": plan, "plan_updated_at": iso(now_utc())}},
+    if event.payment_status != "paid" or not user_id or not plan:
+        return {"received": True, "verified": True, "processed": False}
+
+    # Idempotency: Stripe retries webhooks on 5xx and sometimes duplicates.
+    # If the payment row is already marked paid we must not re-apply.
+    if event.session_id:
+        existing = await db.payments.find_one(
+            {"session_id": event.session_id},
+            {"_id": 0, "payment_status": 1, "plan": 1, "user_id": 1},
         )
-        if event.session_id:
-            await db.payments.update_one(
-                {"session_id": event.session_id},
-                {
-                    "$set": {
-                        "payment_status": "paid",
-                        "status": "complete",
-                        "paid_at": iso(now_utc()),
-                    }
-                },
+        if existing and existing.get("payment_status") == "paid":
+            return {"received": True, "verified": True, "processed": False, "reason": "already_paid"}
+        # Also sanity-check the user_id/plan match our stored intent so a
+        # tampered metadata field can't upgrade the wrong account.
+        if existing and (
+            existing.get("user_id") != user_id or existing.get("plan") != plan
+        ):
+            logger.warning(
+                f"Webhook metadata mismatch for session {event.session_id}: "
+                f"stored=({existing.get('user_id')},{existing.get('plan')}) "
+                f"event=({user_id},{plan}); ignoring."
             )
-    return {"received": True}
+            return {"received": True, "verified": True, "processed": False, "reason": "metadata_mismatch"}
+
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"plan": plan, "plan_updated_at": iso(now_utc())}},
+    )
+    if event.session_id:
+        await db.payments.update_one(
+            {"session_id": event.session_id},
+            {
+                "$set": {
+                    "payment_status": "paid",
+                    "status": "complete",
+                    "paid_at": iso(now_utc()),
+                }
+            },
+        )
+    logger.info(f"Webhook upgraded {user_id} to plan {plan}")
+    return {"received": True, "verified": True, "processed": True}

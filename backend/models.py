@@ -1,23 +1,22 @@
 """Pydantic request / response models shared across routes."""
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str
+    # Minimum 8 characters so brute force is meaningfully harder. Existing
+    # accounts with shorter passwords can still sign in (LoginRequest has no
+    # min_length), but new accounts must meet this bar.
+    password: str = Field(min_length=8, max_length=128)
     name: Optional[str] = None
     referral_code: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
-
-
-class GoogleSessionRequest(BaseModel):
-    session_id: str
+    password: str = Field(min_length=1, max_length=128)
 
 
 class UserOut(BaseModel):

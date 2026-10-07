@@ -1,16 +1,16 @@
-"""Auth routes: register, login, google session, me, delete-me."""
+"""Auth routes: register, login, me, delete-me (email/password only)."""
 import uuid
 from datetime import timedelta
 
 import bcrypt
-import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from core import (
     db,
     ensure_admin,  # noqa: F401  (kept for parity)
     get_current_user,
     iso,
+    limiter,
     logger,
     make_referral_code,
     make_token,
@@ -19,7 +19,6 @@ from core import (
 )
 from models import (
     AuthResponse,
-    GoogleSessionRequest,
     LoginRequest,
     RegisterRequest,
     UserOut,
@@ -29,7 +28,8 @@ router = APIRouter(tags=["auth"])
 
 
 @router.post("/auth/register", response_model=AuthResponse)
-async def register(req: RegisterRequest):
+@limiter.limit("5/minute;30/hour")
+async def register(request: Request, req: RegisterRequest):
     email = req.email.lower().strip()
     existing = await db.users.find_one({"email": email}, {"_id": 0, "auth_provider": 1})
     if existing:
@@ -77,7 +77,8 @@ async def register(req: RegisterRequest):
 
 
 @router.post("/auth/login", response_model=AuthResponse)
-async def login(req: LoginRequest):
+@limiter.limit("10/minute;60/hour")
+async def login(request: Request, req: LoginRequest):
     email = req.email.lower().strip()
     user = await db.users.find_one({"email": email}, {"_id": 0})
     if not user:
@@ -85,14 +86,13 @@ async def login(req: LoginRequest):
             status_code=401,
             detail="No account with that email. Tap 'Create account' to sign up.",
         )
-    # Accounts created via Google sign-in have no password
     if not user.get("password_hash"):
+        # Legacy accounts (e.g. the removed Google provider) have no password.
         raise HTTPException(
             status_code=401,
             detail=(
-                "This account uses Google Sign-In. "
-                "Tap 'Continue with Google' on the login screen, "
-                "or contact the app owner to have a password issued."
+                "This account has no password set. "
+                "Contact the app owner via 'Forgot password?' to have one issued."
             ),
         )
     if not bcrypt.checkpw(req.password.encode(), user["password_hash"].encode()):
@@ -100,52 +100,6 @@ async def login(req: LoginRequest):
             status_code=401,
             detail="Wrong password. Tap 'Forgot password?' to have the owner issue a new one.",
         )
-    token = make_token(user["user_id"])
-    return AuthResponse(token=token, user=await user_to_out(user))
-
-
-@router.post("/auth/google", response_model=AuthResponse)
-async def google_auth(req: GoogleSessionRequest):
-    """Exchange Emergent session_id for our JWT.
-
-    This handles Google, GitHub, and other providers supported by the Emergent Auth Portal.
-    """
-    async with httpx.AsyncClient(timeout=20.0) as h:
-        resp = await h.get(
-            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-            headers={"X-Session-ID": req.session_id},
-        )
-    if resp.status_code != 200:
-        raise HTTPException(status_code=401, detail="Invalid auth session")
-
-    data = resp.json()
-    email = (data.get("email") or "").lower()
-    provider = data.get("provider") or "google"
-
-    if not email:
-        # Fallback for providers that don't always provide an email (e.g. GitHub)
-        # Use the subject (sub) or provider-specific ID to create a stable placeholder email.
-        uid = data.get("sub") or data.get("id") or data.get("login")
-        if uid:
-            email = f"{uid}@{provider}.emergent.sh"
-        else:
-            raise HTTPException(status_code=400, detail=f"No email or ID provided by {provider}")
-
-    user = await db.users.find_one({"email": email}, {"_id": 0})
-    if not user:
-        user_id = f"user_{uuid.uuid4().hex[:12]}"
-        user = {
-            "user_id": user_id,
-            "email": email,
-            "name": data.get("name") or data.get("login") or email.split("@")[0],
-            "picture": data.get("picture") or data.get("avatar_url"),
-            "password_hash": None,
-            "plan": "free",
-            "created_at": iso(now_utc()),
-            "auth_provider": provider,
-            "referral_code": make_referral_code(user_id),
-        }
-        await db.users.insert_one(user)
     token = make_token(user["user_id"])
     return AuthResponse(token=token, user=await user_to_out(user))
 

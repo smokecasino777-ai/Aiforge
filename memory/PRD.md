@@ -13,7 +13,10 @@ AiForge is a cyberpunk-themed Android-ready Expo mobile app for AI-powered creat
 - **Payments**: Stripe via emergentintegrations (test mode)
 
 ## Auth
-- Email + password only (JWT, bcrypt). Google OAuth endpoint exists on backend but is **not** exposed in the UI per latest user spec.
+- Email + password only (JWT, bcrypt). Google OAuth has been **fully removed** from both frontend and backend as of 2026-10 security hardening.
+- Rate limits (slowapi): `/auth/login` 10/min, `/auth/register` 5/min, `/admin/unlock` 5/min.
+- JWT revocation on password change via `iat` vs `password_changed_at` field.
+- Password min length: 8 chars on new accounts.
 
 ## Core Features
 1. **Generation** — `/api/generate` (image, video, model3d) + `/api/generate/scad` (code **and** PNG preview) + `/api/chat` (multi-turn)
