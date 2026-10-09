@@ -84,6 +84,5 @@ credentials.json
 *.key
 .credentials
 frontend/.metro-cache/
-.env
-.env.*
-*.env
+# NOTE: Do NOT re-add `.env`, `.env.*`, or `*.env` here. Emergent deployment
+# rewrites env files at build time, so they must remain trackable.

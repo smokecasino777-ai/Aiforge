@@ -12,7 +12,7 @@ const SECTIONS: { title: string; body: string }[] = [
   {
     title: '1. Who we are',
     body:
-      'AiForge ("we", "us") is a multi-AI creation app operated by the developer behind the Google Play listing for `com.aiforge.app`. Contact: support@aiforge.app.',
+      'AiForge ("we", "us") is a multi-AI creation app published to the Google Play Store and Apple App Store. Contact: support@aiforge.app.',
   },
   {
     title: '2. What we collect',
