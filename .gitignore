@@ -84,3 +84,6 @@ credentials.json
 *.key
 .credentials
 frontend/.metro-cache/
+.env
+.env.*
+*.env
