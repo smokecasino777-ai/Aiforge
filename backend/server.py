@@ -27,7 +27,7 @@ from core import (
     now_utc,
     select_authorized_db,
 )
-from routes import admin, assets, auth, avatar, checkout, editor, generation, legal, referrals, subscription
+from routes import admin, assets, auth, avatar, checkout, editor, generation, legal, referrals, subscription, tokens, voice
 
 # AiForge API - Triggering deployment
 # In production, hide the admin API surface from drive-by probes.
@@ -82,6 +82,8 @@ api.include_router(referrals.router)
 api.include_router(generation.router)
 api.include_router(checkout.router)
 api.include_router(subscription.router)
+api.include_router(tokens.router)
+api.include_router(voice.router)
 api.include_router(editor.router)
 api.include_router(avatar.router)
 api.include_router(admin.router)
@@ -155,6 +157,44 @@ async def _seed_admin():
         logger.warning(f"Admin seed skipped: {type(e).__name__}: {str(e)[:160]}")
 
 
+async def _backfill_free_gens():
+    """One-time gift of 5 free gens (30-day window) for pre-existing free
+    users who registered before the token system shipped.
+
+    Idempotent — only touches rows that are MISSING both fields, so running
+    this on every boot is safe. Admin, Pro, and legacy paid users are left
+    alone because they already have unlimited (or large) daily caps.
+    """
+    try:
+        from core import FREE_SIGNUP_GENS, FREE_SIGNUP_WINDOW_DAYS  # local import to avoid cycle
+        from datetime import timedelta
+        expires = iso(now_utc() + timedelta(days=FREE_SIGNUP_WINDOW_DAYS))
+        res = await db.users.update_many(
+            {
+                "plan": "free",
+                "free_gens_remaining": {"$exists": False},
+            },
+            {
+                "$set": {
+                    "free_gens_remaining": FREE_SIGNUP_GENS,
+                    "free_gens_expires_at": expires,
+                    "tokens_balance": 0,
+                    "tokens_total_purchased": 0,
+                    "backfilled_free_gens_at": iso(now_utc()),
+                }
+            },
+        )
+        if res.modified_count:
+            logger.info(
+                f"Backfilled {res.modified_count} free user(s) with "
+                f"{FREE_SIGNUP_GENS} free gens (expires {expires})"
+            )
+    except Exception as e:
+        logger.warning(
+            f"Free-gen backfill skipped: {type(e).__name__}: {str(e)[:160]}"
+        )
+
+
 @app.on_event("startup")
 async def on_startup():
     # Must run FIRST: points `db` at the database this Mongo user is actually
@@ -167,7 +207,19 @@ async def on_startup():
     await _safe_create_index(db.creations, "creation_id", unique=True)
     await _safe_create_index(db.usage, [("user_id", 1), ("day", 1)], unique=True)
     await _safe_create_index(db.payments, "session_id", unique=True)
+    # token_ledger: idempotency on transaction_id so RevenueCat retries never
+    # double-credit a user's token pack.
+    await _safe_create_index(
+        db.token_ledger, "transaction_id", unique=True, sparse=True
+    )
+    await _safe_create_index(
+        db.token_ledger, [("user_id", 1), ("created_at", -1)]
+    )
     await _seed_admin()
+    # Backfill free-gen gift for pre-existing free users who registered
+    # before the token system shipped. Idempotent (only touches rows
+    # missing both fields).
+    await _backfill_free_gens()
     logger.info("AiForge backend started")
 
 

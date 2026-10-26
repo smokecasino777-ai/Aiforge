@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import * as Sentry from '@sentry/react-native';
 
 import { useIconFonts } from '@/src/hooks/use-icon-fonts';
 import { AuthProvider } from '@/src/context/AuthContext';
@@ -14,6 +15,47 @@ import {
 } from '@/src/lib/revenuecat';
 
 SplashScreen.preventAutoHideAsync();
+
+// MODULE-SCOPE Sentry init — must run before any screen renders so a crash
+// during the first paint is still captured. The DSN is a PUBLIC key (safe
+// to ship in the client bundle), hence EXPO_PUBLIC_*.
+//
+// Validation: a real DSN looks like `https://<key>@o<org>.ingest.sentry.io/<id>`.
+// We've been bitten by users pasting documentation / CLI output into the
+// secrets form, which Sentry.init treats as a fatal boot error. The regex
+// below rejects anything that isn't a plausible HTTPS DSN BEFORE we call
+// Sentry.init, so a bad value just disables crash reporting instead of
+// crashing the app on launch night.
+const RAW_SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN;
+const DSN_PATTERN = /^https:\/\/[^@\s]+@[^/\s]+\/\d+$/;
+const SENTRY_DSN =
+  typeof RAW_SENTRY_DSN === 'string' && DSN_PATTERN.test(RAW_SENTRY_DSN.trim())
+    ? RAW_SENTRY_DSN.trim()
+    : undefined;
+if (!SENTRY_DSN && RAW_SENTRY_DSN) {
+  console.warn(
+    'Sentry disabled: EXPO_PUBLIC_SENTRY_DSN is not a valid DSN URL. ' +
+      "Expected 'https://<key>@o<org>.ingest.sentry.io/<id>'.",
+  );
+}
+if (SENTRY_DSN) {
+  try {
+    Sentry.init({
+      dsn: SENTRY_DSN,
+      // Opt in to session tracking so error-free sessions show up on the
+      // Sentry dashboard, which is what the Play Store launch dashboard
+      // reads. tracesSampleRate 0 keeps perf costs flat for launch night;
+      // we can turn it up post-launch.
+      enableAutoSessionTracking: true,
+      tracesSampleRate: 0,
+      // Only report in prod and preview — dev crashes are developer noise.
+      enabled: !__DEV__,
+      environment: __DEV__ ? 'development' : 'production',
+    });
+  } catch (err) {
+    console.warn('Sentry init failed (non-fatal):', err);
+  }
+}
 
 // MODULE-SCOPE: configure RevenueCat exactly once, before any component
 // mounts. Wrapped in try/catch so a misconfiguration never crashes the app.
@@ -31,7 +73,7 @@ const queryClient = new QueryClient({
   },
 });
 
-export default function RootLayout() {
+function RootLayout() {
   const [loaded, error] = useIconFonts();
 
   useEffect(() => {
@@ -71,3 +113,7 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+// Wrap the root so render-time crashes also reach Sentry. In dev or when
+// no DSN is set, Sentry.wrap is a cheap passthrough.
+export default SENTRY_DSN ? Sentry.wrap(RootLayout) : RootLayout;

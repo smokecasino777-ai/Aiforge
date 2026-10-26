@@ -107,3 +107,16 @@ See `/app/memory/test_credentials.md`.
 - Emergent-managed Google Auth: 'Continue with Google' buttons on login + register (Text 'G' badge, no icon imports — previous Chrome-icon crash cause eliminated).
 - src/utils/googleAuth.ts (web full-page redirect / native openAuthSessionAsync with aiforge://login deep link), GoogleSessionCatcher in _layout.tsx, api.googleAuth → POST /api/auth/google (exchanges session_id, upserts user, returns app JWT; Google users get referral_code).
 - Email/password login coexists untouched. Tested: 11/11 backend + full frontend regression PASS (iteration_11); register.tsx missing-destructure bug found by testing agent and fixed.
+
+## Update (2026-10 — iter-19 Launch Night fixes)
+- **Backend hardening (3 bugs flagged by iter-18 testing agent — all green now)**:
+  - Voice `_reserve_quota`: added hard `amount > cap` guard BEFORE the atomic increment, so the first request of the day can no longer bypass the free cap via the `$exists:False` branch. Voice regression 3/3 pass.
+  - RevenueCat webhook: `payload.get("event") or {}` falsely coerced `[]` → `{}` and 200’d. Now distinguishes `None` (legacy flat body) vs non-dict (rejected 400). test_non_dict_body_400 pass.
+  - Pro 402 message: removed misleading "grab a token pack" wording — Pro/legacy daily-limit users don’t spend `tokens_balance`.
+  - Startup backfill: `_backfill_free_gens()` now actually runs on boot (was defined but never called). Logged "Backfilled 15 free user(s)" on first start.
+  - `tokens.py`: dropped unused `now_iso` variable.
+- **Frontend**:
+  - `_layout.tsx`: added regex guard on `EXPO_PUBLIC_SENTRY_DSN` (`^https://[^@]+@[^/]+/\\d+$`) so pasted documentation/CLI output no longer boots Sentry — now it just logs a warning and ships without crash reporting. App renders cleanly with an invalid DSN in `.env`.
+  - Home: new "Free tokens expire in Xd" chip (`FreeTokensBadge`) under the usage bar — pulls from `/tokens/balance`, swaps colour to pink at ≤5 days left, falls back to "Out of free gens — tap to grab a token pack" when both free_gens and tokens_balance are 0. Taps route to Plans.
+- **Launch artifact**: `/app/memory/LAUNCH_CHECKLIST.md` fully refreshed with Play Console / RevenueCat / Secrets / build / smoke-test sections.
+- Known non-blockers for tonight’s launch (documented in LAUNCH_CHECKLIST §6): Azure chat key 401 (502s on chat/SCAD, image+video unaffected), Emergent sora-2 404 (video jobs refund 3 tokens cleanly), invalid Sentry DSN (safe-guarded).

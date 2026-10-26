@@ -195,6 +195,95 @@ PLAN_LIMITS = {
     "quantum": 2000,
     "singularity": 99999,
 }
+
+# Legacy paying tiers from the Stripe era. They keep their daily_limit flow
+# (no token spend) — grandfathered.
+LEGACY_PAID_TIERS = {"spark", "forge", "neon", "quantum", "singularity"}
+
+# ----- Free tier + Token pack config -----
+# Signup gift: every new account gets this many free_gens, usable for the
+# window below (one-time). After that they must buy tokens or go Pro.
+FREE_SIGNUP_GENS = 5
+FREE_SIGNUP_WINDOW_DAYS = 30
+
+# Cost (in tokens / free_gens) per generation type. Voice is quota'd
+# separately in routes/voice.py and consumes 0 here.
+TOKEN_COSTS = {
+    "image": 1,
+    "chat": 1,
+    "video": 3,
+    "model3d": 3,
+    "scad": 3,
+    "voice": 0,
+}
+
+# Google Play / RevenueCat token packs (Play Console product_id → tokens).
+# These product IDs MUST match what you create in the Play Console AND
+# import into RevenueCat as Consumable products.
+TOKEN_PACKS = {
+    "tokens_25": 25,
+    "tokens_100": 100,
+    "tokens_500": 500,
+}
+
+
+def token_cost_for(gen_type: str) -> int:
+    """Return token cost for a given generation type. Unknown types default
+    to 1 so no path accidentally generates free content."""
+    return int(TOKEN_COSTS.get(gen_type, 1))
+
+
+async def consume_free_capacity(user_id: str, cost: int) -> tuple[bool, str]:
+    """Atomically debit a free-tier user's `cost` from free_gens, falling
+    back to purchased tokens_balance. Returns (ok, source) where source is
+    'free' | 'tokens' | 'none'.
+
+    Uses `find_one_and_update` with a `$gte` guard so two concurrent
+    requests can't both debit the same unit (race-free).
+    """
+    if cost <= 0:
+        return True, "voice"
+    now_iso = iso(now_utc())
+    # 1) Prefer debiting the free signup gens if any left AND not expired.
+    res = await db.users.find_one_and_update(
+        {
+            "user_id": user_id,
+            "free_gens_remaining": {"$gte": cost},
+            "free_gens_expires_at": {"$gt": now_iso},
+        },
+        {"$inc": {"free_gens_remaining": -cost}},
+        projection={"_id": 1},
+    )
+    if res is not None:
+        return True, "free"
+    # 2) Fallback to purchased tokens.
+    res = await db.users.find_one_and_update(
+        {"user_id": user_id, "tokens_balance": {"$gte": cost}},
+        {"$inc": {"tokens_balance": -cost}},
+        projection={"_id": 1},
+    )
+    if res is not None:
+        return True, "tokens"
+    return False, "none"
+
+
+async def refund_free_capacity(user_id: str, cost: int, source: str) -> None:
+    """Reverse a prior consume_free_capacity debit. Called when the AI call
+    itself fails after we already debited. Best-effort: errors are logged
+    but never raised — a stray refund failure must not break the user's
+    error response."""
+    if cost <= 0 or source == "voice":
+        return
+    try:
+        field = "free_gens_remaining" if source == "free" else "tokens_balance"
+        await db.users.update_one(
+            {"user_id": user_id}, {"$inc": {field: cost}}
+        )
+    except Exception as e:
+        logger.warning(
+            f"Capacity refund failed for user {user_id} (+{cost} {source}): "
+            f"{type(e).__name__}: {str(e)[:120]}"
+        )
 PLAN_PRICES = {
     "pro": 9.99,
     "spark": 9.99,
@@ -333,6 +422,16 @@ async def user_to_out(user: dict) -> UserOut:
                 bonus_until_iso = bonus_until
         except Exception:
             pass
+
+    # Free-tier gens: only valid if the 30-day signup window hasn't elapsed.
+    expires_at = user.get("free_gens_expires_at") or ""
+    try:
+        free_valid = bool(expires_at) and datetime.fromisoformat(expires_at) > now_utc()
+    except Exception:
+        free_valid = False
+    free_gens_remaining = int(user.get("free_gens_remaining", 0) or 0) if free_valid else 0
+    tokens_balance = int(user.get("tokens_balance", 0) or 0)
+
     return UserOut(
         id=user["user_id"],
         email=user["email"],
@@ -344,6 +443,9 @@ async def user_to_out(user: dict) -> UserOut:
         referral_code=user.get("referral_code"),
         bonus_until=bonus_until_iso,
         bonus_amount=bonus_amount,
+        free_gens_remaining=free_gens_remaining,
+        free_gens_expires_at=expires_at if free_valid else None,
+        tokens_balance=tokens_balance,
     )
 
 

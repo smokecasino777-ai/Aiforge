@@ -1,0 +1,51 @@
+{
+  "summary": "I tested the backend for the free tier, token packs and token-cost enforcement through the public ingress. Result: 17 of 18 tests in the new suite pass (tests A-J plus 2 extra edge cases). Signup gift, /tokens/balance, /tokens/history, the webhook token grant, replay idempotency, unknown product, unknown user, bad auth (401/401/400), the Pro INITIAL_PURCHASE/EXPIRATION webhooks and the Pro skip-debit all work. Expired free gens cannot be used. 6 parallel requests against 1 token gave exactly one success and five 402s, so the debit has no race. Refunds after AI failures work. There are two infrastructure blockers. (1) All text generation returns 502 because the Azure gpt-4o key gets 401. This breaks chat on /generate, /chat and /generate/scad (G3 failed). (2) Every video job fails in the background with 'No video returned', because the Emergent sora-2 endpoint returns 404. The 3 tokens are correctly refunded, so in test B free_gens ended at 3 instead of 0. Test B4 (402) needed a DB zero-out to run because of that refund. Regressions: the voice free-tier cap does not apply to the first request of the day (3 voice tests fail), and webhook {\"event\": []} now returns 200 instead of 400. Sentry: the frontend DSN in .env is not a valid DSN. The backend has no Sentry setup.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/generate (type=chat), POST /api/chat, POST /api/generate/scad", "issue": "Returns 502. Azure chat/completions answers 401 'Access denied due to invalid subscription key or wrong API endpoint'. AZURE key/endpoint in backend/.env is invalid or expired, so all text generation is down. The token is correctly refunded. Reproduced with ai_providers.generate_text directly.", "priority": "CRITICAL"},
+      {"endpoint": "POST /api/generate (type=video), background _process_video_job", "issue": "Every video job ends status=failed with error 'No video returned'. emergentintegrations OpenAIVideoGeneration gets '404 Not Found for url https://integrations.emergentagent.com/llm/openai/v1/videos'. AZURE_VIDEO_DEPLOYMENT is empty, so the code falls back to Emergent, which fails. The 3 tokens are refunded correctly, but users can never get a video.", "priority": "HIGH"},
+      {"endpoint": "Existing free users (data migration)", "issue": "All 15 existing plan=free users have no free_gens_expires_at or tokens_balance fields. _reserve_capacity therefore returns 402 on their first generation. Only new signups get the 5-gen gift. A one-time backfill is needed (set free_gens_remaining=5 and expires_at=now+30d where the field is missing), or a lazy init in consume_free_capacity.", "priority": "HIGH"},
+      {"endpoint": "POST /api/voice/tts, POST /api/voice/stt (regression)", "issue": "routes/voice.py:116-122 _reserve_quota allows the increment whenever the counter does not exist ($exists False) without checking amount <= cap. The first request of the day can therefore exceed the free cap: 301 chars of TTS, or 16s of STT that then returns 502. test_voice_iter18: test_free_cap_429_upgrade_msg, test_free_within_cap_then_429 and test_free_quota_429 now fail. Fix: if amount > cap, raise 429 before the update.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/webhook/revenuecat", "issue": "{\"event\": []} returns 200 (no_user_id) instead of 400, because `payload.get('event') or {}` turns an empty list into {} (subscription.py:265). test_subscription_webhook_iter17::test_non_dict_body_400 fails."},
+      {"endpoint": "_reserve_capacity (Pro/legacy)", "issue": "The Pro daily-limit 402 says 'grab a token pack for instant gens', but Pro and legacy users never spend tokens_balance. Purchased tokens cannot be used once the daily limit is hit. Either fall back to consume_free_capacity or change the message."},
+      {"endpoint": "Referral bonus", "issue": "For free users, bonus_amount (+20/day) is now meaningless because free users no longer go through daily_limit. user_to_out still shows daily_limit=5+bonus to free users, which is misleading. The referral reward is effectively broken for free users."},
+      {"endpoint": "GET /api/tokens/balance", "issue": "Unused variable now_iso (tokens.py:33). Cosmetic."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "Sentry init", "issue": "EXPO_PUBLIC_SENTRY_DSN in frontend/.env is 'Client Version: 58.0.5 Supported SDK: 58.0.0', which is not a Sentry DSN (it looks like pasted CLI output). Sentry.init will reject it and no crashes will be reported. Reference: /app/frontend/app/_layout.tsx:22-38"}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_tokens_free_tier_iter19.py",
+    "/app/test_reports/pytest/pytest_tokens_iter19.xml"
+  ],
+  "action_items": [
+    "CRITICAL: fix the Azure text credentials (AZURE key / AZURE_OPENAI_BASE / deployment) or fall back to the Emergent LLM on a 401. Chat and SCAD are fully down (502).",
+    "HIGH: video generation always fails because the Emergent sora endpoint returns 404. Set AZURE_VIDEO_DEPLOYMENT, or hide or disable video until it works.",
+    "HIGH: backfill free_gens_remaining=5 and free_gens_expires_at=now+30d (and tokens_balance=0) for existing free users that lack the fields.",
+    "HIGH: voice _reserve_quota: reject when amount > cap, including when the counter does not exist yet (routes/voice.py:109-126).",
+    "MEDIUM: replace EXPO_PUBLIC_SENTRY_DSN with a real DSN (https://<key>@oXXX.ingest.sentry.io/<id>). Consider adding sentry-sdk to the backend if backend monitoring was intended.",
+    "MINOR: webhook should return 400 when the 'event' key is present but is not a non-empty object (use `event = payload.get('event'); if event is None: event = {}`).",
+    "MINOR: let Pro/legacy users spend tokens_balance after the daily limit, or fix the 402 wording. Review how the referral bonus applies to free users.",
+    "Update stale legacy tests: test_subscription_webhook_iter16 (expects no secret), test_admin_stripe_key (uses demo as admin), and test_aiforge_backend TestDailyLimit/google (old free daily-limit model, Google auth removed)."
+  ],
+  "critical_code_review_comments": [
+    "consume_free_capacity compares ISO strings ($gt now_iso). This works because both sides are written by iso() with +00:00, but it breaks if any writer uses the 'Z' suffix or a naive datetime. Storing a BSON datetime would be safer.",
+    "refund_free_capacity can refund free gens after the 30-day window has passed. This is harmless because user_to_out hides them.",
+    "The video debit is reported as success up front and refunded asynchronously. The client should poll the creation status and re-read the balance."
+  ],
+  "updated_files": ["/app/backend/tests/test_tokens_free_tier_iter19.py"],
+  "success_rate": {"backend": "94% (17/18 new token tests; the only failure is G3 chat, caused by Azure 401)", "frontend": "not tested"},
+  "seed_data_creation": "The new suite registers alice2@test.com, test_pro_<sfx>, test_exp_<sfx> and test_race_<sfx>, and deletes all of them plus their token_ledger rows and creations in teardown. Legacy regression suites created their own test_* users.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_tokens_free_tier_iter19.py -v -s (about 60s, run in background). The suite reads the RC secret and Mongo from the .env files and the URL from frontend/.env. Register is limited to 5/min and login to 10/min, so wait about 65s between suites or you get 429. Video jobs fail asynchronously within about 1s and refund 3 tokens. B3 adapts to that and B4 zeroes free_gens in the DB to exercise the 402 path. Legacy suites iter16, admin_stripe and aiforge_backend have stale expectations.",
+  "rca_of_issue": "Chat 502: ai_providers.generate_text goes to Azure, which returns HTTP 401 invalid subscription key. Video failure: emergentintegrations returns 404 on /llm/openai/v1/videos, text_to_video returns None, and the code raises RuntimeError('No video returned'). Voice cap bypass: the $or branch {counter: {$exists: false}} has no amount guard."
+}

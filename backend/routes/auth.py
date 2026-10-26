@@ -6,6 +6,8 @@ import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from core import (
+    FREE_SIGNUP_GENS,
+    FREE_SIGNUP_WINDOW_DAYS,
     db,
     ensure_admin,  # noqa: F401  (kept for parity)
     get_current_user,
@@ -53,6 +55,15 @@ async def register(request: Request, req: RegisterRequest):
         "created_at": iso(now_utc()),
         "auth_provider": "email",
         "referral_code": make_referral_code(user_id),
+        # Free signup gift: FREE_SIGNUP_GENS generations, valid for
+        # FREE_SIGNUP_WINDOW_DAYS from now. Shown on the home screen as a
+        # countdown so users feel the urgency to upgrade or buy tokens.
+        "free_gens_remaining": FREE_SIGNUP_GENS,
+        "free_gens_expires_at": iso(
+            now_utc() + timedelta(days=FREE_SIGNUP_WINDOW_DAYS)
+        ),
+        "tokens_balance": 0,
+        "tokens_total_purchased": 0,
     }
 
     # Referral bonus

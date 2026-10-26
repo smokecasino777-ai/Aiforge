@@ -15,7 +15,8 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "Pick photos and videos to edit with AI",
         "NSPhotoLibraryAddUsageDescription": "Save edited creations back to your library",
-        "NSCameraUsageDescription": "Capture photos and videos to edit with AI"
+        "NSCameraUsageDescription": "Capture photos and videos to edit with AI",
+        "NSMicrophoneUsageDescription": "Speak to the AI assistant hands-free"
       }
     },
     "android": {
@@ -30,7 +31,8 @@
         "android.permission.INTERNET",
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO",
-        "android.permission.READ_EXTERNAL_STORAGE"
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -58,7 +60,14 @@
           "backgroundColor": "#020208"
         }
       ],
-      "expo-video"
+      "expo-video",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Speak to the AI assistant hands-free"
+        }
+      ],
+      "@sentry/react-native"
     ],
     "experiments": {
       "typedRoutes": true

@@ -25,6 +25,7 @@ from pydantic import BaseModel
 from core import (
     PLAN_LIMITS,
     REVENUECAT_WEBHOOK_SECRET,
+    TOKEN_PACKS,
     db,
     get_current_user,
     iso,
@@ -39,17 +40,19 @@ router = APIRouter(tags=["subscription"])
 # users from before the switch keep their original limits.
 LEGACY_TIERS = {"spark", "forge", "neon", "quantum", "singularity"}
 
-# RevenueCat event types that activate / deactivate the pro entitlement.
-# See https://www.revenuecat.com/docs/webhooks for the full list.
+# RevenueCat event types that activate / deactivate the pro ENTITLEMENT (the
+# recurring subscription). NON_RENEWING_PURCHASE is handled separately below
+# because it credits consumable tokens — not Pro.
 ACTIVATE_EVENTS = {
     "INITIAL_PURCHASE",
     "RENEWAL",
     "PRODUCT_CHANGE",
     "UNCANCELLATION",
-    "NON_RENEWING_PURCHASE",
     "TRIAL_STARTED",
     "TRIAL_CONVERTED",
 }
+# Token pack events — credit tokens, DO NOT upgrade plan.
+TOKEN_EVENTS = {"NON_RENEWING_PURCHASE"}
 # RevenueCat semantics: CANCELLATION means auto-renew turned off — the user
 # STILL has access until the paid period expires. Only EXPIRATION should
 # actually downgrade. BILLING_ISSUE and SUBSCRIPTION_PAUSED are also
@@ -136,6 +139,89 @@ async def _apply_entitlement(user_id: str, *, active: bool, event: dict) -> dict
     return {"status": "updated", "plan": target_plan}
 
 
+async def _grant_tokens(user_id: str, event: dict) -> dict:
+    """Credit a user's `tokens_balance` based on a RevenueCat
+    NON_RENEWING_PURCHASE event. Idempotent per transaction_id.
+
+    product_id MUST exist in TOKEN_PACKS (core.py). Unknown products are
+    logged and dropped so a misconfigured Play Store product can't ever
+    silently award tokens.
+    """
+    product_id = (event.get("product_id") or "").strip()
+    tokens = TOKEN_PACKS.get(product_id)
+    if not tokens:
+        logger.warning(
+            f"RC webhook: unknown token product_id={product_id!r} for "
+            f"user={user_id}; dropping. Known: {list(TOKEN_PACKS.keys())}"
+        )
+        return {"status": "unknown_product", "product_id": product_id}
+
+    txn_id = (
+        event.get("transaction_id")
+        or event.get("original_transaction_id")
+        or f"{user_id}:{product_id}:{event.get('event_timestamp_ms') or ''}"
+    )
+
+    # Idempotency guard: if we've seen this transaction, skip the increment.
+    try:
+        existing = await db.token_ledger.find_one(
+            {"transaction_id": txn_id}, {"_id": 1}
+        )
+    except Exception:
+        existing = None
+    if existing:
+        logger.info(f"RC webhook: duplicate token grant for txn={txn_id}; skipped")
+        return {"status": "duplicate", "transaction_id": txn_id}
+
+    # Make sure the user actually exists before we debit RevenueCat for nothing.
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "email": 1})
+    if not user:
+        logger.warning(
+            f"RC webhook: token grant for unknown user_id={user_id}; dropping"
+        )
+        return {"status": "unknown_user"}
+
+    now_iso = iso(now_utc())
+    try:
+        await db.token_ledger.insert_one(
+            {
+                "user_id": user_id,
+                "product_id": product_id,
+                "tokens": int(tokens),
+                "transaction_id": txn_id,
+                "store": event.get("store"),
+                "environment": event.get("environment"),
+                "price_in_purchased_currency": event.get("price_in_purchased_currency"),
+                "currency": event.get("currency"),
+                "created_at": now_iso,
+            }
+        )
+    except Exception as e:
+        # Unique index on transaction_id — a concurrent duplicate landing at
+        # exactly the same ms will fail here; treat as idempotent success.
+        logger.info(
+            f"RC webhook: token_ledger insert failed (likely duplicate txn): "
+            f"{type(e).__name__}: {str(e)[:120]}"
+        )
+        return {"status": "duplicate", "transaction_id": txn_id}
+
+    await db.users.update_one(
+        {"user_id": user_id},
+        {
+            "$inc": {
+                "tokens_balance": int(tokens),
+                "tokens_total_purchased": int(tokens),
+            },
+            "$set": {"last_token_purchase_at": now_iso},
+        },
+    )
+    logger.info(
+        f"RC webhook: +{tokens} tokens to {user.get('email')} "
+        f"(product={product_id}, txn={txn_id})"
+    )
+    return {"status": "credited", "tokens": int(tokens), "product_id": product_id}
+
+
 @router.post("/webhook/revenuecat")
 async def revenuecat_webhook(
     request: Request, authorization: Optional[str] = Header(None)
@@ -176,7 +262,11 @@ async def revenuecat_webhook(
         logger.warning("RevenueCat webhook: payload is not an object")
         raise HTTPException(status_code=400, detail="Payload must be a JSON object")
 
-    event = payload.get("event") or {}
+    event = payload.get("event")
+    if event is None:
+        # Legacy "flat" test payloads: the whole body IS the event.
+        event = {}
+    # Must be an object. Anything else — list, string, number — is malformed.
     if not isinstance(event, dict):
         raise HTTPException(status_code=400, detail="event must be an object")
     event_type = (event.get("type") or "").upper()
@@ -189,6 +279,8 @@ async def revenuecat_webhook(
         result = await _apply_entitlement(app_user_id, active=True, event=event)
     elif event_type in DEACTIVATE_EVENTS:
         result = await _apply_entitlement(app_user_id, active=False, event=event)
+    elif event_type in TOKEN_EVENTS:
+        result = await _grant_tokens(app_user_id, event)
     else:
         # TEST events and other informational types we just ACK.
         logger.info(f"RC webhook: ignored event type {event_type} for {app_user_id}")

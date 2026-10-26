@@ -11,6 +11,7 @@ This file is memory for a later agent that may need to call the integration prox
 - Packages (package -> product_id, current price):
   - $rc_monthly -> prod77b31683df   ($9.99 / P1M, **7-day free trial P1W**)
   - $rc_annual  -> prod8cf02917ae   ($79.99 / P1Y, no trial, SAVE 33% positioning)
+  - $rc_weekly  -> prod69670b4e17   ($4.99 / P1W, impulse-buy tier)
 - Dashboard: https://app.revenuecat.com/projects/proj63cca90c
 - Bundle id / Android package: `app.emergent.fierceforgeios2c75fc60`
 

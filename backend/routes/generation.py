@@ -9,7 +9,9 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from ai_providers import generate_image, generate_text, generate_video
 from core import (
+    LEGACY_PAID_TIERS,
     PLAN_LIMITS,
+    consume_free_capacity,
     daily_used,
     db,
     get_current_user,
@@ -17,10 +19,77 @@ from core import (
     iso,
     logger,
     now_utc,
+    refund_free_capacity,
+    token_cost_for,
 )
 from models import ChatRequest, CreationOut, GenerateRequest, ScadRequest
 
 router = APIRouter(tags=["generation"])
+
+
+# ---------- Capacity gate (shared) ----------
+#
+# For PRO / legacy paying users: the old daily_limit flow still applies —
+# a hard cap of e.g. 500/day with a shared `usage` counter.
+#
+# For FREE users: ignore daily_limit entirely and instead atomically debit
+# the user's free_gens_remaining (signup gift) OR tokens_balance (purchased
+# packs) by the generation's token_cost. If both are empty, 402 is raised
+# and the paywall / token store is shown.
+#
+# The debit happens BEFORE the AI call so two parallel calls can't both pass
+# the check. If the AI call fails, we refund via refund_free_capacity.
+async def _reserve_capacity(user: dict, gen_type: str) -> tuple[str, int, str]:
+    """Returns (mode, cost, source).
+      mode   : 'daily' for Pro/legacy, 'tokens' for free users
+      cost   : token cost (0 for daily mode)
+      source : 'free' | 'tokens' | 'daily'
+    Raises 402 if the user is out of capacity.
+    """
+    plan = (user.get("plan") or "free").lower()
+    if plan == "pro" or plan in LEGACY_PAID_TIERS:
+        limit = PLAN_LIMITS.get(plan, 5)
+        used = await daily_used(user["user_id"])
+        if used >= limit:
+            # Pro / legacy users don't spend tokens_balance — the daily limit
+            # is their hard ceiling. The old message mentioned token packs,
+            # which was misleading (iter-18 feedback). We tell them when
+            # it resets instead.
+            raise HTTPException(
+                status_code=402,
+                detail=(
+                    f"Daily limit reached ({limit}/day). "
+                    f"Resets at midnight UTC."
+                ),
+            )
+        return "daily", 0, "daily"
+    # Free tier: must have free_gens OR purchased tokens.
+    cost = token_cost_for(gen_type)
+    ok, source = await consume_free_capacity(user["user_id"], cost)
+    if not ok:
+        raise HTTPException(
+            status_code=402,
+            detail=(
+                "You're out of generations. "
+                "Grab a token pack (one-time) or go Pro for unlimited daily gens."
+            ),
+        )
+    return "tokens", cost, source
+
+
+async def _confirm_capacity(user_id: str, mode: str) -> None:
+    """Called after a SUCCESSFUL generation. In daily mode this bumps the
+    usage counter; in tokens mode the debit already happened — no-op."""
+    if mode == "daily":
+        await increment_usage(user_id)
+
+
+async def _refund_capacity(user_id: str, mode: str, cost: int, source: str) -> None:
+    """Called when the AI call failed. Reverses the pre-reserved debit so
+    the user isn't charged for a failed generation."""
+    if mode == "tokens":
+        await refund_free_capacity(user_id, cost, source)
+    # daily mode never increments on failure — nothing to refund.
 
 
 # ---------- Helpers ----------
@@ -35,7 +104,16 @@ async def _generate_image_sync(prompt: str, style_3d: bool = False) -> tuple[str
     return await generate_image(final_prompt)
 
 
-async def _process_video_job(creation_id: str, prompt: str, duration: int, size: str):
+async def _process_video_job(
+    creation_id: str,
+    user_id: str,
+    prompt: str,
+    duration: int,
+    size: str,
+    mode: str,
+    cost: int,
+    source: str,
+):
     try:
         video_bytes, mime = await generate_video(prompt, duration, size)
         b64 = base64.b64encode(video_bytes).decode()
@@ -53,6 +131,8 @@ async def _process_video_job(creation_id: str, prompt: str, duration: int, size:
         logger.info(f"Video creation {creation_id} completed")
     except Exception as e:
         logger.exception("Video generation failed")
+        # Refund the capacity we reserved up front.
+        await _refund_capacity(user_id, mode, cost, source)
         await db.creations.update_one(
             {"creation_id": creation_id},
             {"$set": {"status": "failed", "error": str(e)[:300]}},
@@ -84,13 +164,7 @@ async def generate(
     background: BackgroundTasks,
     user: dict = Depends(get_current_user),
 ):
-    plan = user.get("plan", "free")
-    limit = PLAN_LIMITS.get(plan, 5)
-    used = await daily_used(user["user_id"])
-    if used >= limit:
-        raise HTTPException(
-            status_code=402, detail=f"Daily limit reached ({limit}). Upgrade your plan."
-        )
+    mode, cost, source = await _reserve_capacity(user, req.type)
 
     creation_id = f"cr_{uuid.uuid4().hex[:14]}"
     title = (req.title or req.prompt[:60]).strip()
@@ -111,22 +185,27 @@ async def generate(
             )
         except Exception as e:
             logger.exception("Image generation failed")
+            await _refund_capacity(user["user_id"], mode, cost, source)
             raise HTTPException(status_code=502, detail=f"Generation failed: {str(e)[:200]}")
         base_doc.update({"status": "ready", "media_data": b64, "media_mime": mime})
         await db.creations.insert_one(base_doc)
-        await increment_usage(user["user_id"])
+        await _confirm_capacity(user["user_id"], mode)
         return _doc_to_creation(base_doc)
 
     if req.type == "video":
         base_doc.update({"status": "processing", "duration": req.duration or 4})
         await db.creations.insert_one(base_doc)
-        await increment_usage(user["user_id"])
+        await _confirm_capacity(user["user_id"], mode)
         background.add_task(
             _process_video_job,
             creation_id,
+            user["user_id"],
             req.prompt,
             req.duration or 4,
             req.size or "1280x720",
+            mode,
+            cost,
+            source,
         )
         return _doc_to_creation(base_doc)
 
@@ -140,6 +219,7 @@ async def generate(
                 prompt=req.prompt,
             )
         except Exception as e:
+            await _refund_capacity(user["user_id"], mode, cost, source)
             raise HTTPException(status_code=502, detail=f"Chat failed: {str(e)[:200]}")
         base_doc.update(
             {
@@ -149,9 +229,11 @@ async def generate(
             }
         )
         await db.creations.insert_one(base_doc)
-        await increment_usage(user["user_id"])
+        await _confirm_capacity(user["user_id"], mode)
         return _doc_to_creation(base_doc)
 
+    # Unknown type — refund whatever we reserved.
+    await _refund_capacity(user["user_id"], mode, cost, source)
     raise HTTPException(status_code=400, detail="Unknown type")
 
 
@@ -159,13 +241,7 @@ async def generate(
 @router.post("/chat", response_model=dict)
 async def chat_endpoint(req: ChatRequest, user: dict = Depends(get_current_user)):
     """Multi-turn chat with persistent history keyed by (user_id, session_id)."""
-    plan = user.get("plan", "free")
-    limit = PLAN_LIMITS.get(plan, 5)
-    used = await daily_used(user["user_id"])
-    if used >= limit:
-        raise HTTPException(
-            status_code=402, detail=f"Daily limit reached ({limit}). Upgrade your plan."
-        )
+    mode, cost, source = await _reserve_capacity(user, "chat")
 
     session_id = req.session_id or f"chat-{uuid.uuid4().hex[:12]}"
 
@@ -202,6 +278,7 @@ async def chat_endpoint(req: ChatRequest, user: dict = Depends(get_current_user)
         else:
             reply = await generate_text(system, req.prompt)
     except Exception as e:
+        await _refund_capacity(user["user_id"], mode, cost, source)
         raise HTTPException(status_code=502, detail=f"Chat failed: {str(e)[:200]}")
 
     new_messages = history + [
@@ -220,7 +297,7 @@ async def chat_endpoint(req: ChatRequest, user: dict = Depends(get_current_user)
         },
         upsert=True,
     )
-    await increment_usage(user["user_id"])
+    await _confirm_capacity(user["user_id"], mode)
     return {"reply": reply, "session_id": session_id}
 
 
@@ -228,13 +305,7 @@ async def chat_endpoint(req: ChatRequest, user: dict = Depends(get_current_user)
 @router.post("/generate/scad")
 async def generate_scad(req: ScadRequest, user: dict = Depends(get_current_user)):
     """Generate OpenSCAD code for a 3D mesh + isometric PNG preview."""
-    plan = user.get("plan", "free")
-    limit = PLAN_LIMITS.get(plan, 5)
-    used = await daily_used(user["user_id"])
-    if used >= limit:
-        raise HTTPException(
-            status_code=402, detail=f"Daily limit reached ({limit}). Upgrade your plan."
-        )
+    mode, cost, source = await _reserve_capacity(user, "scad")
     try:
         code = await generate_text(
             system=(
@@ -245,6 +316,7 @@ async def generate_scad(req: ScadRequest, user: dict = Depends(get_current_user)
             prompt=f"Generate OpenSCAD code for: {req.prompt}",
         )
     except Exception as e:
+        await _refund_capacity(user["user_id"], mode, cost, source)
         raise HTTPException(status_code=502, detail=f"SCAD generation failed: {str(e)[:200]}")
     code = code.strip()
     if code.startswith("```"):
@@ -273,7 +345,7 @@ async def generate_scad(req: ScadRequest, user: dict = Depends(get_current_user)
         "scad_code": code,
     }
     await db.creations.insert_one(doc)
-    await increment_usage(user["user_id"])
+    await _confirm_capacity(user["user_id"], mode)
     return _doc_to_creation(doc)
 
 

@@ -30,6 +30,11 @@ class UserOut(BaseModel):
     referral_code: Optional[str] = None
     bonus_until: Optional[str] = None
     bonus_amount: int = 0
+    # Free-tier signup gift (set at register, 30-day window).
+    free_gens_remaining: int = 0
+    free_gens_expires_at: Optional[str] = None
+    # Purchased consumable tokens (RevenueCat NON_RENEWING_PURCHASE).
+    tokens_balance: int = 0
 
 
 class AuthResponse(BaseModel):

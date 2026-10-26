@@ -28,9 +28,12 @@ import StarryBackground from '@/src/components/StarryBackground';
 import GhostLogoBackground from '@/src/components/GhostLogoBackground';
 import GradientButton from '@/src/components/GradientButton';
 import PressableScale from '@/src/components/PressableScale';
+import SpeakButton from '@/src/components/SpeakButton';
+import MicButton from '@/src/components/MicButton';
 import { colors, radius } from '@/src/theme/colors';
 import { api } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
+import { useSubscription } from '@/src/lib/revenuecat';
 
 type GenType = 'image' | 'video' | 'model3d' | 'scad' | 'chat';
 
@@ -77,6 +80,11 @@ type ChatMsg = { role: 'user' | 'assistant'; text: string };
 export default function CreateScreen() {
   const router = useRouter();
   const { user, refresh } = useAuth();
+  const { isSubscribed } = useSubscription();
+  // Voice features are gated by Pro-level plan. "Pro" includes:
+  //   - RevenueCat active entitlement (isSubscribed = true)
+  //   - Any paid plan on the user doc (free users = false; everyone else = true)
+  const isPro = isSubscribed || (!!user?.plan && user.plan !== 'free');
   const [type, setType] = useState<GenType>('image');
   const [prompt, setPrompt] = useState('');
   const [duration, setDuration] = useState<number>(4);
@@ -218,6 +226,7 @@ export default function CreateScreen() {
                 scrollRef={chatScrollRef}
                 onPickIdea={(p) => setPrompt(p)}
                 ideas={PROMPT_IDEAS.chat}
+                isPro={isPro}
               />
             ) : (
               <>
@@ -311,6 +320,7 @@ function ChatPanel({
   scrollRef,
   onPickIdea,
   ideas,
+  isPro,
 }: {
   messages: ChatMsg[];
   prompt: string;
@@ -320,6 +330,7 @@ function ChatPanel({
   scrollRef: React.RefObject<ScrollView | null>;
   onPickIdea: (p: string) => void;
   ideas: string[];
+  isPro: boolean;
 }) {
   return (
     <View style={styles.chatWrap}>
@@ -385,6 +396,9 @@ function ChatPanel({
                 {m.text}
               </Text>
             </View>
+            {m.role === 'assistant' && m.text?.trim() ? (
+              <SpeakButton text={m.text} isPro={isPro} />
+            ) : null}
             {m.role === 'user' ? (
               <View style={[styles.bubbleAvatar, { backgroundColor: colors.cyan + '22' }]}>
                 <UserIcon size={12} color={colors.cyan} />
@@ -416,6 +430,15 @@ function ChatPanel({
             multiline
           />
         </View>
+        <MicButton
+          isPro={isPro}
+          onTranscript={(t) => {
+            // Hands-free: insert the transcript and auto-send.
+            setPrompt(t);
+            setTimeout(() => onSend(), 50);
+          }}
+          onError={(msg) => Alert.alert('Voice input', msg)}
+        />
         <PressableScale
           onPress={onSend}
           haptic

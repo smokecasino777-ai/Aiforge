@@ -84,7 +84,7 @@ class TestAuthRegression:
         d = r.json()
         assert d["token"].count(".") == 2 and d["user"]["email"] == DEMO["email"]
         STATE["demo_token"] = d["token"]
-        STATE["demo_uid"] = d["user"]["user_id"]
+        STATE["demo_uid"] = (d["user"].get("user_id") or d["user"]["id"])
 
     def test_me(self):
         tok = STATE.get("demo_token") or pytest.skip()
@@ -149,7 +149,7 @@ class TestWebhookSigned:
 
     def test_full_lifecycle(self, secret):
         tok, user = _register("TEST_rcwh17")
-        uid = user["user_id"]
+        uid = (user.get("user_id") or user["id"])
         exp = int((time.time() + 30 * 86400) * 1000)
         try:
             # INITIAL_PURCHASE (raw secret) -> pro/500

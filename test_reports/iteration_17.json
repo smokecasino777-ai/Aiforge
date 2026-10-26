@@ -1,0 +1,55 @@
+{
+  "summary": "Backend-only test of the new Voice API (quota/TTS/STT) plus auth/subscription regressions, run against the public URL. FOUND AND FIXED A CRITICAL BUG: STT failed 100% of the time. STT_MODEL='gpt-4o-mini-transcribe' is rejected by the emergentintegrations OpenAISpeechToText ('Invalid model... Must be one of [whisper-1]'), so every /api/voice/stt call returned 502 and still used up the user's quota. I changed it to 'whisper-1' (one line in routes/voice.py:52). STT now works end-to-end: TTS mp3 -> STT returned 'AI Forge Voice QHX C1379D.'. Still open: a HIGH bug where the quota check is not atomic. 25 concurrent free-user TTS calls all returned 200, which served 500 chars against a 300-char cap, and the counter only recorded 60. The cap can be bypassed. Other results: quota defaults are correct (free 300/15, pro and legacy forge 20000/600). TTS cache miss then hit returns the same bytes and charges both calls. Empty or cleaned-to-empty text gives 400, and text over 4000 chars is truncated and charged 4000. Free 429 says 'upgrade to Pro' and pro 429 says 'tomorrow'. STT rejects clips under 2KB (400) and over 5MB (413), and blocks free users over the cap (429). Every endpoint returns 401 without auth. Rate limits trigger (TTS 30/min, STT 20/min, keyed per IP). All regressions pass: login and me, google 404, read-only sync rejects forged entitlement, unsigned or wrong-secret webhook gives 401, INITIAL_PURCHASE then CANCELLATION (no downgrade) then EXPIRATION, legacy users are grandfathered, and spoofing X-Forwarded-For does not bypass the login rate limit. No deprecated expo packages were found (expo-audio is used).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/voice/stt", "issue": "FIXED BY TESTING AGENT. STT_MODEL 'gpt-4o-mini-transcribe' is not supported by emergentintegrations OpenAISpeechToText (only 'whisper-1'), so every transcription returned 502 and still used up quota. Changed to 'whisper-1' and verified end-to-end.", "priority": "CRITICAL"},
+      {"endpoint": "POST /api/voice/tts, /api/voice/stt (_reserve_quota)", "issue": "Quota reservation is NOT atomic. It does find_one -> compare -> $set used+amount. Reproduced: 25 concurrent 20-char TTS calls on a free user (cap 300, so at most 15 allowed) all returned 200 (500 chars served), and the stored counter was 60 because of lost updates from $set overwrites. The cap is bypassable with parallel requests. Fix: one conditional atomic update, e.g. update_one({'user_id':uid,'$or':[{field:{'$exists':False}},{field:{'$lte':cap-amount}}]},{'$inc':{field:amount}}). If matched_count==0, return 429. Reference: routes/voice.py:96-126", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/voice/tts, /api/voice/stt", "issue": "Quota is charged before the provider call and never refunded on failure. Invalid voice (502) charged 19 chars, and garbage audio (502) charged 1 sec. Refund with $inc -amount in the except branch."},
+      {"endpoint": "POST /api/voice/tts", "issue": "The 'voice' field is not validated. An unknown voice returns 502 'TTS failed: Invalid voice' instead of 400 and costs quota. Validate against ['alloy','ash','coral','echo','fable','nova','onyx','sage','shimmer'] before reserving quota."},
+      {"endpoint": "POST /api/voice/tts|stt (502 responses)", "issue": "The Cloudflare ingress replaces backend 502 bodies with an HTML 'Bad gateway' page, so the client never sees the JSON detail. ttsFetchAudio (src/api/client.ts:313-316) then throws the whole HTML or raw JSON string as the error message. Use a status the ingress passes through (e.g. 500/424, or 400 for validation errors), and parse .detail on the client."},
+      {"endpoint": "POST /api/voice/tts (429 message)", "issue": "Legacy paid tiers (forge/neon/quantum/singularity/spark) get the Pro cap but the 429 says 'upgrade to Pro'. The condition is plan != 'pro' instead of plan == 'free'. Reference: routes/voice.py:119"},
+      {"endpoint": "POST /api/voice/stt", "issue": "The whole upload is read into memory before the 5MB check. Seconds are estimated from file size at 24KB/s: low-bitrate opus/webm gets undercharged about 6x, and uncompressed WAV gets overcharged. Acceptable for cost control, but note it."},
+      {"endpoint": "rate limits /voice/*", "issue": "Limits are keyed per IP, not per user. Mobile users behind carrier NAT share the 30/min TTS and 20/min STT buckets. Consider keying voice limits by user_id."},
+      {"endpoint": "TtsRequest", "issue": "text has no max_length. Very large bodies (MBs) are regex-processed before truncation. Add Field(max_length=20000)."},
+      {"endpoint": "users.voice_quota / tts_cache", "issue": "A per-day key is added to every user doc forever, and tts_cache grows without bound (audio bytes stored in Mongo). Add cleanup or a TTL index."},
+      {"endpoint": "POST /api/webhook/revenuecat", "issue": "{'event': []} returns 200 no_user_id because an empty list is falsy and gets coerced to {}. Harmless ACK. A non-empty list still returns 400."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_voice_iter18.py",
+    "/app/backend/tests/race_voice_quota_iter18.py",
+    "/app/backend/tests/test_subscription_webhook_iter17.py",
+    "/app/test_reports/pytest/pytest_voice_iter18.xml",
+    "/app/test_reports/pytest/pytest_iter17_regression_rerun.xml"
+  ],
+  "action_items": [
+    "HIGH: Make _reserve_quota atomic with a conditional $inc (filter on field <= cap-amount). Re-run tests/race_voice_quota_iter18.py: successes must be <= 15 and recorded used must equal successes*20.",
+    "Review the testing agent's fix STT_MODEL='whisper-1' (routes/voice.py:52) and keep it. gpt-4o-mini-transcribe is not supported by emergentintegrations.",
+    "Refund reserved quota when the TTS/STT provider call fails.",
+    "Validate the 'voice' value (400) before reserving quota.",
+    "Avoid 502 from voice endpoints because the ingress swaps the body for HTML. Parse the JSON detail in ttsFetchAudio.",
+    "Fix the 429 message condition: plan == 'free' -> 'upgrade to Pro', otherwise 'try again tomorrow'.",
+    "Optional: add max_length on TtsRequest.text, per-user rate-limit key for voice, and TTL/cleanup for tts_cache and old voice_quota buckets."
+  ],
+  "critical_code_review_comments": [
+    "voice.py docstring mentions a /voice/tts/{key}.mp3 endpoint that does not exist.",
+    "_reserve_quota makes 2 DB reads plus a non-atomic write. Merge them into one find_one_and_update/conditional update.",
+    "uvicorn --reload watches /app/backend including tests/. Creating test files restarts the server and resets the in-memory slowapi counters.",
+    "test_subscription_webhook_iter17.py assumed user['user_id'], but the API returns user['id']. Fixed the test (not an API regression; UserOut has always used 'id')."
+  ],
+  "updated_files": [
+    "/app/backend/routes/voice.py (STT_MODEL -> whisper-1)",
+    "/app/backend/tests/test_voice_iter18.py (new)",
+    "/app/backend/tests/race_voice_quota_iter18.py (new)",
+    "/app/backend/tests/test_subscription_webhook_iter17.py (user id key fix)"
+  ],
+  "success_rate": {"backend": "93% (28/30 voice+regression after STT fix; remaining failures: legacy 429 message, invalid voice 502), plus the race probe FAILED (non-atomic quota). iter17 regression 16/17 (only {'event':[]} minor)", "frontend": "not tested (backend only)"},
+  "seed_data_creation": "None persistent. Created test_*@aiforgeqa.dev users and deleted them via DELETE /auth/me. Also purged 5 leftover test_*@aiforgeqa.dev users from earlier iter17 runs. The demo account's voice_quota bucket has 44 chars used from the demo quota test. Pymongo was used only to set a TEST user to plan=forge and to pre-fill quota buckets for test users.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: export $(grep EXPO_PUBLIC_BACKEND_URL /app/frontend/.env | xargs); pytest tests/test_voice_iter18.py -v -s. Then wait 60s and run python tests/race_voice_quota_iter18.py 25. Register is limited to 5/min per IP and login to 10/min, so wait 60s between suites. / and /health are only reachable on localhost:8001 (public non-/api traffic goes to Expo).",
+  "rca_of_issue": "STT: emergentintegrations OpenAISpeechToText.MODELS == ['whisper-1'] and it raises ValueError for any other model. The backend caught this and returned 502 after reserving quota. Quota race: reading the counter and writing used+amount with $set lets concurrent requests read the same value, so all pass the check and overwrite each other's writes."
+}

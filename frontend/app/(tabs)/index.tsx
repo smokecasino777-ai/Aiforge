@@ -10,7 +10,7 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ImageIcon, Video, Box, MessageSquare, ArrowRight, Sparkles, Zap, UserCircle2 } from 'lucide-react-native';
+import { ImageIcon, Video, Box, MessageSquare, ArrowRight, Sparkles, Zap, UserCircle2, Clock3 } from 'lucide-react-native';
 import StarryBackground from '@/src/components/StarryBackground';
 import GhostLogoBackground from '@/src/components/GhostLogoBackground';
 import PulsingLogo from '@/src/components/Logo';
@@ -22,20 +22,39 @@ import { useAuth } from '@/src/context/AuthContext';
 import { api, Creation } from '@/src/api/client';
 
 type Stats = { image: number; video: number; model3d: number; chat: number };
+type Balance = {
+  free_gens_remaining: number;
+  free_gens_expires_at: string | null;
+  tokens_balance: number;
+  total_available: number;
+};
 
 export default function Home() {
   const router = useRouter();
   const { user, refresh } = useAuth();
   const [stats, setStats] = useState<Stats>({ image: 0, video: 0, model3d: 0, chat: 0 });
   const [recent, setRecent] = useState<Creation[]>([]);
+  const [balance, setBalance] = useState<Balance | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [s, list] = await Promise.all([api.creationStats(), api.listCreations()]);
+      const [s, list, bal] = await Promise.all([
+        api.creationStats(),
+        api.listCreations(),
+        api.tokensBalance().catch(() => null),
+      ]);
       setStats(s);
       setRecent(list.slice(0, 8));
+      if (bal) {
+        setBalance({
+          free_gens_remaining: bal.free_gens_remaining,
+          free_gens_expires_at: bal.free_gens_expires_at,
+          tokens_balance: bal.tokens_balance,
+          total_available: bal.total_available,
+        });
+      }
     } catch {}
   }, []);
 
@@ -112,6 +131,11 @@ export default function Home() {
                 ]}
               />
             </View>
+
+            <FreeTokensBadge
+              balance={balance}
+              onPress={() => router.push('/(tabs)/plans')}
+            />
 
             <GradientButton
               title="Start Creating"
@@ -279,6 +303,71 @@ function CategoryCard({
   );
 }
 
+// Small chip under the usage bar that nudges free users toward purchase.
+// Hidden entirely for Pro/legacy users and when the gift has already expired
+// AND the user has 0 purchased tokens — we don't want to show a dead badge.
+function FreeTokensBadge({
+  balance,
+  onPress,
+}: {
+  balance: {
+    free_gens_remaining: number;
+    free_gens_expires_at: string | null;
+    tokens_balance: number;
+    total_available: number;
+  } | null;
+  onPress: () => void;
+}) {
+  if (!balance) return null;
+  const hasFree = balance.free_gens_remaining > 0;
+  const hasTokens = balance.tokens_balance > 0;
+  if (!hasFree && !hasTokens) {
+    // Out of credits — show the "upgrade" chip so the user never sees empty state.
+    return (
+      <PressableScale onPress={onPress} testID="home-tokens-badge-empty">
+        <View style={[styles.freeBadge, { borderColor: colors.pink + '66', backgroundColor: colors.pink + '18' }]}>
+          <Clock3 size={13} color={colors.pink} />
+          <Text style={[styles.freeBadgeText, { color: colors.pink }]}>Out of free gens — tap to grab a token pack</Text>
+        </View>
+      </PressableScale>
+    );
+  }
+
+  // Build the "expires in X days" fragment for the signup gift.
+  let daysLeft: number | null = null;
+  if (hasFree && balance.free_gens_expires_at) {
+    const t = Date.parse(balance.free_gens_expires_at);
+    if (!Number.isNaN(t)) {
+      daysLeft = Math.max(0, Math.ceil((t - Date.now()) / (1000 * 60 * 60 * 24)));
+    }
+  }
+
+  const pieces: string[] = [];
+  if (hasFree) {
+    pieces.push(
+      daysLeft != null
+        ? `${balance.free_gens_remaining} free gen${balance.free_gens_remaining === 1 ? '' : 's'} · expires in ${daysLeft}d`
+        : `${balance.free_gens_remaining} free gen${balance.free_gens_remaining === 1 ? '' : 's'}`,
+    );
+  }
+  if (hasTokens) {
+    pieces.push(`${balance.tokens_balance} token${balance.tokens_balance === 1 ? '' : 's'}`);
+  }
+
+  // Urgency colour when the free gift is close to expiring.
+  const urgent = daysLeft != null && daysLeft <= 5;
+  const col = urgent ? colors.pink : hasTokens ? colors.green : colors.cyan;
+
+  return (
+    <PressableScale onPress={onPress} testID="home-tokens-badge">
+      <View style={[styles.freeBadge, { borderColor: col + '66', backgroundColor: col + '18' }]}>
+        <Clock3 size={13} color={col} />
+        <Text style={[styles.freeBadgeText, { color: col }]}>{pieces.join(' · ')}</Text>
+      </View>
+    </PressableScale>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   scroll: { paddingHorizontal: 18, paddingBottom: 40, gap: 22 },
@@ -329,6 +418,18 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   barFill: { height: 6, borderRadius: 3 },
+  freeBadge: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  freeBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
   categoryRow: { flexDirection: 'row', gap: 10 },
   editorTile: {
     flexDirection: 'row',

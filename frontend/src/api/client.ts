@@ -22,6 +22,9 @@ export type User = {
   referral_code?: string | null;
   bonus_until?: string | null;
   bonus_amount?: number;
+  free_gens_remaining?: number;
+  free_gens_expires_at?: string | null;
+  tokens_balance?: number;
 };
 
 export type Creation = {
@@ -299,6 +302,57 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  },
+  // ---- Tokens (free gens + paid consumable packs via RevenueCat) ----
+  async tokensBalance() {
+    return request<{
+      free_gens_remaining: number;
+      free_gens_expires_at: string | null;
+      tokens_balance: number;
+      tokens_total_purchased: number;
+      total_available: number;
+      costs: Record<string, number>;
+      signup_gens: number;
+    }>('/tokens/balance');
+  },
+  async tokensHistory() {
+    return request<{
+      entries: Array<{
+        product_id?: string;
+        tokens: number;
+        store?: string;
+        environment?: string;
+        created_at?: string;
+        transaction_id?: string;
+      }>;
+      count: number;
+    }>('/tokens/history');
+  },
+  // ---- Voice (TTS + STT) ----
+  async ttsFetchAudio(text: string, voice?: string): Promise<ArrayBuffer> {
+    const token = await storage.secureGet<string>(TOKEN_KEY, '');
+    const r = await fetch(`${BASE}/api/voice/tts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ text, voice }),
+    });
+    if (!r.ok) {
+      const detail = await r.text().catch(() => '');
+      throw new Error(detail || `TTS failed (${r.status})`);
+    }
+    return r.arrayBuffer();
+  },
+  async voiceQuota() {
+    return request<{
+      plan: string;
+      tts_chars_used: number;
+      tts_chars_cap: number;
+      stt_seconds_used: number;
+      stt_seconds_cap: number;
+    }>('/voice/quota');
   },
 };
 
