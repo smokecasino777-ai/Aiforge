@@ -207,13 +207,20 @@ security = HTTPBearer(auto_error=False)
 
 # ----- Rate limiter -----
 # Keyed by client IP. Behind an ingress/LB (K8s, Emergent) the direct peer IP
-# is the proxy, so we check X-Forwarded-For first (ingress-controlled, trusted
-# on this platform). Falls back to the direct peer IP for local dev.
+# is the proxy. The ingress APPENDS the real client IP to X-Forwarded-For
+# (format: "<client-supplied>, <proxy1>, <trusted-ingress>"), so we must take
+# the LAST entry — never the first, since the first is attacker-controlled
+# and would let someone bypass rate limits by injecting a fake header.
+# X-Real-IP is also set by common ingresses as the authoritative client IP;
+# prefer it when present.
 def _rate_limit_key(request) -> str:  # noqa: ANN001 — fastapi.Request
-    xff = (request.headers.get("x-forwarded-for") or "").split(",")
-    first = xff[0].strip() if xff else ""
-    if first:
-        return first
+    xri = (request.headers.get("x-real-ip") or "").strip()
+    if xri:
+        return xri
+    xff = request.headers.get("x-forwarded-for") or ""
+    parts = [p.strip() for p in xff.split(",") if p.strip()]
+    if parts:
+        return parts[-1]
     return get_remote_address(request)
 
 

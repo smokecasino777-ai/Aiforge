@@ -1,0 +1,25 @@
+{
+  "summary": "Re-checked the iter13 rate-limit bypass, where a spoofed X-Forwarded-For header let attackers skip the /api/auth/login limit. The fix holds on both public URLs (https://fierce-forge-ios.emergent.host and https://fierce-forge-ios.preview.emergentagent.com). Without spoofing, the first 10 requests return 401 and requests 11-15 return 429 (limit 10/minute). After that, 15 requests in each of four spoofing modes all returned 429: X-Forwarded-For rotated per request (10.0.0.N), multi-hop X-Forwarded-For rotated, X-Real-IP rotated, and both headers rotated together. No 401 came back in any spoofed run, so no spoofed request got a fresh bucket. The ingress overrides or appends the real client IP, so the key func's X-Real-IP / last-X-Forwarded-For choice is not attacker-controlled. Normal limiting still works: a fresh client IP (simulated locally on :8001 through both X-Real-IP and the last X-Forwarded-For entry) got 10x401 then 429.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "slowapi Limiter (core.py:227)", "issue": "The limiter uses slowapi's default in-memory storage (no storage_uri). If production runs more than one uvicorn worker or pod, each one keeps its own counters, so the real limit is 10/min x the number of instances. For strict limits across instances, point it at shared storage such as Redis or Mongo. This is not a bypass."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []},
+  "test_report_links": ["/app/backend/tests/check_rate_limit_xff_iter14.py", "/app/backend/tests/check_public_xff_iter13.py"],
+  "action_items": [
+    "Optional: before scaling to more than one worker or replica, move the slowapi storage to a shared backend (Limiter(key_func=..., storage_uri=...))."
+  ],
+  "critical_code_review_comments": [
+    "core.py:216-224 _rate_limit_key is correct for this ingress topology: X-Real-IP first, then the last X-Forwarded-For entry, then the peer address. Testing showed the ingress overrides a client-supplied X-Real-IP; spoofed X-Real-IP values did not escape the exhausted bucket.",
+    "Caveat: if the backend were ever reachable directly without the trusted ingress, both headers would be attacker-controlled. That does not apply here because traffic goes only through the K8s ingress."
+  ],
+  "updated_files": ["/app/backend/tests/check_rate_limit_xff_iter14.py"],
+  "success_rate": {"backend": "100% (12/12 rate-limit scenarios as expected)", "frontend": "N/A (skipped as requested)"},
+  "seed_data_creation": "None. Only failed logins with random TEST_nobody_*@example.com emails.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login limit is 10/minute;60/hour per client IP, held in memory. Running the check script repeatedly uses up the container's egress-IP hourly budget (60/hour), so later runs may get 429 straight away. Wait about an hour or restart the backend for a clean baseline. Run: PUB_URLS=\"<url1>,<url2>\" LOCAL_URL=http://localhost:8001 python /app/backend/tests/check_rate_limit_xff_iter14.py",
+  "rca_of_issue": "Iter13 RCA: the key func used xff.split(',')[0], the client-supplied first entry. Fixed by preferring X-Real-IP, then the last X-Forwarded-For entry (appended by the trusted ingress). Verified fixed on both public URLs."
+}

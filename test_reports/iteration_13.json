@@ -1,0 +1,30 @@
+{
+  "summary": "Backend-only auth test (iteration 13). 20/20 pytest checks passed against http://localhost:8001: health probes (/, /health, /api/), /api/auth/google returns 404, register (200 + JWT, 422 for short password or invalid email, 400 for a duplicate email even with different capitalisation), login (owner, demo, and a new user; 401 'Wrong password' and 'No account' messages), /auth/me (200 with plan and limits, 401 for missing or invalid token), login rate limit (requests 1-10 return 401, from the 11th they return 429), admin reset revoking old JWTs (403 without the sudo token; the old token gets 401 'Session expired after password change'; old password rejected, new password works) and DELETE /auth/me (token and login both rejected afterwards). The public preview URL also works: owner and demo logins return 200, and the 429 fires correctly when the real client IP is used. Nothing blocks the Play Store launch. One security issue: anyone can get around the rate limit by sending a different X-Forwarded-For header on each request.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/login, /api/auth/register, /api/admin/unlock", "issue": "Anyone can get around the rate limit. core._rate_limit_key uses the FIRST (leftmost) X-Forwarded-For entry, which the client controls, and the ingress adds to the header instead of replacing it. Tested on the public preview URL: 15 rapid wrong-password logins, each with a different X-Forwarded-For value, all returned 401 and none returned 429. This makes brute-forcing passwords possible. Reference: /app/backend/core.py:212-217"},
+      {"endpoint": "rate limiter storage", "issue": "slowapi uses in-memory storage. Counters reset whenever the backend restarts or hot-reloads (seen in the logs when a file changed), and each worker keeps its own counts. This is acceptable for now."},
+      {"endpoint": "JWT revocation", "issue": "The iat claim is whole seconds and the password_changed_at comparison drops the fraction, so a token issued in the same second as a password reset still works. Very unlikely in practice. Reference: /app/backend/core.py:264-271"}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []},
+  "test_report_links": ["/app/backend/tests/test_auth_iter13.py", "/app/backend/tests/check_public_xff_iter13.py", "/app/test_reports/pytest/pytest_iter13.xml"],
+  "action_items": [
+    "Fix the rate-limit key so clients can't spoof it: use the rightmost X-Forwarded-For entry (the one the trusted ingress adds) or X-Real-IP if the ingress sets it, instead of xff[0]. After the fix, run check_public_xff_iter13.py again: the spoofed run should start returning 429.",
+    "Optional: compare against the fractional password_changed_at value (or use a token_version counter) for exact JWT revocation.",
+    "Optional: delete the roughly 60 leftover test_*@example.com users from earlier iterations in the preview DB."
+  ],
+  "critical_code_review_comments": [
+    "routes/auth.py imports ensure_admin but never uses it (marked noqa). Harmless.",
+    "Login checks emails case-insensitively; registration lowercases emails. Both are correct.",
+    "admin/reset-user-password has no rate limit of its own, but it requires the sudo token from admin/unlock, which is limited to 5/min. Acceptable."
+  ],
+  "updated_files": ["/app/backend/tests/test_auth_iter13.py", "/app/backend/tests/check_public_xff_iter13.py"],
+  "success_rate": {"backend": "100% (20/20)", "frontend": "not tested (backend only, as requested)"},
+  "seed_data_creation": "None. All test users were created as test_<hex>@example.com and deleted at the end through DELETE /api/auth/me.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Each test in test_auth_iter13.py sends a random X-Forwarded-For value so tests don't share a rate-limit bucket. This only works because of the spoofing bug; once the key function is fixed, the tests may hit the 5/min register limit and need pauses between runs. Owner and demo credentials are in /app/memory/test_credentials.md.",
+  "rca_of_issue": "Spoofable rate limit: the Kubernetes ingress adds the real client IP to the END of X-Forwarded-For and keeps whatever the client sent at the start. _rate_limit_key reads the first entry, so every spoofed value gets its own fresh bucket. To reproduce: PUB_URL=<public url> python /app/backend/tests/check_public_xff_iter13.py. Fix: key on the last trusted entry."
+}
