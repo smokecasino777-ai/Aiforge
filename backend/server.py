@@ -27,7 +27,7 @@ from core import (
     now_utc,
     select_authorized_db,
 )
-from routes import admin, assets, auth, avatar, checkout, editor, generation, legal, referrals
+from routes import admin, assets, auth, avatar, checkout, editor, generation, legal, referrals, subscription
 
 # AiForge API - Triggering deployment
 # In production, hide the admin API surface from drive-by probes.
@@ -81,6 +81,7 @@ api.include_router(auth.router)
 api.include_router(referrals.router)
 api.include_router(generation.router)
 api.include_router(checkout.router)
+api.include_router(subscription.router)
 api.include_router(editor.router)
 api.include_router(avatar.router)
 api.include_router(admin.router)

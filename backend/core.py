@@ -48,6 +48,12 @@ STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "sk_test_emergent")
 # sk_live_/sk_test_ key is in use; the Emergent sandbox proxy
 # (sk_test_emergent) never issues real webhooks.
 STRIPE_WEBHOOK_SECRET = (os.environ.get("STRIPE_WEBHOOK_SECRET") or "").strip()
+# RevenueCat webhook secret. Set this to the EXACT value you type into the
+# RevenueCat dashboard → Project → Integrations → Webhooks → Authorization
+# header (e.g. "Bearer <random-string>" or just "<random-string>"). Without
+# this, the webhook endpoint accepts no events and NO plan upgrades happen.
+# This is the ONLY server-authoritative path for Pro upgrades.
+REVENUECAT_WEBHOOK_SECRET = (os.environ.get("REVENUECAT_WEBHOOK_SECRET") or "").strip()
 ADMIN_EMAIL = (os.environ.get("ADMIN_EMAIL") or "").lower().strip()
 # "production" | "preview" | "development" — controls docs exposure, CORS, etc.
 APP_ENV = (os.environ.get("APP_ENV") or "preview").lower().strip()
@@ -180,6 +186,9 @@ logger = logging.getLogger("aiforge")
 # ----- Plan config -----
 PLAN_LIMITS = {
     "free": 5,
+    # NEW: RevenueCat-driven single "Pro" tier at $9.99/mo via Google Play.
+    "pro": 500,
+    # Legacy Stripe tiers kept so any grandfathered account keeps its limit.
     "spark": 50,
     "forge": 200,
     "neon": 500,
@@ -187,6 +196,7 @@ PLAN_LIMITS = {
     "singularity": 99999,
 }
 PLAN_PRICES = {
+    "pro": 9.99,
     "spark": 9.99,
     "forge": 29.99,
     "neon": 49.99,
@@ -195,6 +205,7 @@ PLAN_PRICES = {
 }
 PLAN_NAMES = {
     "free": "Free",
+    "pro": "AiForge Pro",
     "spark": "Spark",
     "forge": "Forge",
     "neon": "Neon Pro",

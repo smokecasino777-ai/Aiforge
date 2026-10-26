@@ -289,6 +289,17 @@ export const api = {
   async avatarClear() {
     return request<{ ok: boolean; user: any }>('/avatar/clear', { method: 'POST' });
   },
+  // ---- Subscriptions (RevenueCat-driven) ----
+  async syncSubscription(payload: {
+    entitlement_active: boolean;
+    product_id?: string;
+    expires_at?: string | null;
+  }) {
+    return request<{ ok: boolean; plan: string; daily_limit: number }>('/subscription/sync', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
 };
 
 export const BACKEND_URL = BASE;

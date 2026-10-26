@@ -1,0 +1,39 @@
+{
+  "summary": "Backend-only re-test of the iter15 free-Pro exploit fix. Public URL suite (17 tests): 16 passed, 1 minor failure. The in-process signed-webhook check (11 checks, secret patched in memory only, .env untouched) passed 10 of 11. The EXPLOIT IS DEAD. A fresh free user calling POST /subscription/sync with {entitlement_active:true, product_id, expires_at:2099}, {entitlement_active:true} or {} gets 200 with plan=free and daily_limit=5, and /auth/me still shows free/5. Grandfathering holds: demo stays forge/200 with true and false. With the secret unset, the webhook returns 200 {received:true, verified:false} for no auth, empty auth, 'Bearer anything', raw 'anything', 'Bearer ' and a non-JSON body. Fake INITIAL_PURCHASE, RENEWAL and TRIAL_STARTED events for a fresh user did not upgrade it (still free/5). A fake EXPIRATION for demo did not downgrade it (still forge). Sync rate limit: 25x200 then 429 (5 earlier calls in the same minute), so 30/min. Auth regression holds: demo login 200 with JWT, /auth/me 200 with Bearer and 401 without, /auth/google 404, /api/ 200, / and /health 200 on the internal port. Login limit with rotating X-Forwarded-For 10.0.0.N: 9x401 then 6x429 (demo login was #10), so spoofing does not bypass it. Signed path with the secret set: wrong or missing auth gives 401, TEST is ignored, INITIAL_PURCHASE (Bearer secret) gives pro/500, sync {false} cannot downgrade pro, EXPIRATION gives free/5, unknown user and missing app_user_id are handled, bad JSON gives 400. A JSON array body with a valid secret gives 500. All test users deleted (0 left). REVENUECAT_WEBHOOK_SECRET is still empty.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/subscription/sync", "issue": "A truly empty request (no body) returns 422 'body Field required'; {} works. The review request says any body or an empty body should work. The current frontend always sends JSON, so it is not affected. Fix: declare `_req: Optional[SubscriptionSyncRequest] = None` (routes/subscription.py:76)."},
+      {"endpoint": "POST /api/webhook/revenuecat", "issue": "Business logic: CANCELLATION is in DEACTIVATE_EVENTS (routes/subscription.py:54), so the user drops to free immediately. In RevenueCat, CANCELLATION means auto-renew was turned off and the user keeps access until expiration_at_ms. The same applies to BILLING_ISSUE, which has a grace period. Paying users lose Pro for the rest of the period they paid for. Suggest: on CANCELLATION or BILLING_ISSUE keep pro and only store expires_at; downgrade on EXPIRATION, or when expires_at has passed (enforce it in the daily-limit check)."},
+      {"endpoint": "POST /api/webhook/revenuecat", "issue": "With a valid secret, a JSON body that is not an object (for example [1,2]) causes a 500, because payload.get raises AttributeError (routes/subscription.py:173). Only reachable with the secret, so low risk. Fix: return 400 if not isinstance(payload, dict)."},
+      {"endpoint": "POST /api/webhook/revenuecat", "issue": "hmac.compare_digest(str, str) raises TypeError when the header contains non-ASCII characters, which gives a 500 instead of 401. Compare .encode() bytes instead (routes/subscription.py:163)."},
+      {"endpoint": "POST /api/webhook/revenuecat", "issue": "No ordering or idempotency guard. RevenueCat retries and can deliver events out of order, so a late EXPIRATION after a RENEWAL would downgrade a paying user. Suggest storing event.event_timestamp_ms and ignoring older events, or re-fetching from the RC REST API."},
+      {"endpoint": "slowapi Limiter", "issue": "Still in-memory, carried over from earlier iterations. Limits multiply with workers or replicas."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [
+    {"flow": "Post-purchase plan sync", "issue": "src/lib/revenuecat.tsx:67-81 syncBackendPlan calls /subscription/sync once and still sends entitlement_active, product_id and expires_at, which are now ignored. There is no retry or poll while the webhook lands, so right after a purchase the backend can still return free while the RC SDK shows Pro. Server-side /generate then enforces 5/day until a later refresh. Add a short retry loop (for example 5x2s) until plan=pro, and remove the unused payload fields.", "affected_testIDs": []}
+  ], "design_issues": [], "react_native_issues": []},
+  "test_report_links": ["/app/backend/tests/test_subscription_webhook_iter16.py", "/app/backend/tests/check_rc_webhook_signed_iter16.py", "/app/test_reports/pytest/pytest_results_iter16.xml"],
+  "action_items": [
+    "MEDIUM: do not downgrade on CANCELLATION or BILLING_ISSUE. Keep pro until expiration_at_ms and downgrade on EXPIRATION, or enforce subscription_expires_at in the daily-limit and user_to_out logic.",
+    "MINOR: make the sync body optional (`_req: Optional[SubscriptionSyncRequest] = None`) so a POST with no body returns 200.",
+    "MINOR: in the webhook, return 400 for non-dict JSON payloads, and compare the secret as bytes so non-ASCII headers return 401 instead of 500.",
+    "MINOR: in the frontend, add a retry or poll after purchase until the backend reports pro, and drop the ignored payload fields from syncSubscription.",
+    "OPTIONAL: add an event_timestamp_ms ordering guard to the webhook.",
+    "Update or retire /app/backend/tests/test_subscription_sync_iter15.py. test_full_lifecycle_fresh_user and test_sync_missing_body_field now fail by design, because the exploit is fixed and {} returns 200."
+  ],
+  "critical_code_review_comments": [
+    "routes/subscription.py: sync is read-only, and the body is parsed but never used. Correct fix for the exploit.",
+    "The webhook fails secure when the secret is empty (200 verified:false and no DB write). The constant-time compare and 'Bearer ' stripping are correct.",
+    "A legacy Spark or Forge user who buys RC Pro stays on 50 or 200/day because the grandfather branch skips them, though Pro gives 500 (carried over from iter15). Consider upgrading when PLAN_LIMITS['pro'] is greater than the current limit.",
+    "The frontend binds RC app_user_id to backend user.id (AuthContext rcLogIn(uid)), which matches the user_id lookup in the webhook. Good."
+  ],
+  "updated_files": ["/app/backend/tests/test_subscription_webhook_iter16.py", "/app/backend/tests/check_rc_webhook_signed_iter16.py"],
+  "success_rate": {"backend": "94% (16/17 public-URL tests; 10/11 in-process signed-webhook checks). Exploit fix verified 100%.", "frontend": "N/A (skipped as requested)"},
+  "seed_data_creation": "Temporary users attacker_test.*, webhook_test.* @aiforgeqa.dev were created and deleted via DELETE /api/auth/me. One user orphaned by a crashed first run was also deleted via the API. 0 test users remain. Demo is still forge. .env was not modified (REVENUECAT_WEBHOOK_SECRET is still empty).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && export $(grep EXPO_PUBLIC_BACKEND_URL /app/frontend/.env | xargs) && pytest tests/test_subscription_webhook_iter16.py -v. The rate-limit tests run last and use up the 30/min sync and 10/min login buckets, so wait 60s before rerunning. For the signed-webhook happy path without touching .env, run: python tests/check_rc_webhook_signed_iter16.py (in-process TestClient, secret patched in memory, cleans up its user).",
+  "rca_of_issue": "The iter15 exploit is fixed. sync_subscription now only reads user.plan from the DB, and only the shared-secret webhook writes plans. Non-ASCII auth headers (TypeError from compare_digest) and non-dict JSON bodies (AttributeError from payload.get) return 500."
+}

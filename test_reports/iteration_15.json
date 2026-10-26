@@ -1,0 +1,33 @@
+{
+  "summary": "Backend-only run against the public preview URL. All 13 tests passed: 12 on the first run, and the /health check passed after being pointed at the internal backend. Auth checks still hold: demo login returns 200 with a JWT, /auth/me returns 200 with no _id or password_hash, and /auth/google returns 404. The login rate limit is 10/min; requests with a rotating spoofed X-Forwarded-For got 9x401 then 429 (the demo login earlier in the same minute counted as #10), so spoofing does not bypass it. /api/subscription/sync works as specified: 401 with no token or a bad token, 422 with an empty body, free to pro (limit 500) to free (limit 5) reflected in /auth/me, the legacy 'forge' demo account stays forge/200 for true and false, and a 30/min limit (25 requests were 200 after 5 earlier calls, then 429). The fresh user (rcsync.*@aiforgeqa.dev) was deleted with DELETE /auth/me (confirmed 401 afterwards, 0 leftover users in the DB). CRITICAL SECURITY FINDING: the sync endpoint trusts the client completely. Any free user can get Pro for free with one curl call (POST /api/subscription/sync {entitlement_active:true}). This was reproduced in the lifecycle test.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/subscription/sync", "issue": "Anyone can grant themselves Pro. The backend never checks the entitlement with RevenueCat; it accepts the client's entitlement_active boolean. Any logged-in free user can call it with {\"entitlement_active\": true} and get plan=pro and daily_limit=500 without paying. Reproduced: a freshly registered free user became pro through a plain HTTP request. This is the same class of bug as SEC-002. The docstring claim that 'a maliciously-crafted call just gets the free limit' is false. Reference: routes/subscription.py:52-66", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "GET /health and GET / (public URL)", "issue": "Not a backend bug. On the public URL the ingress sends non-/api paths to Expo: /health returns 404 from Expo and / returns the Expo HTML. Internally on :8001 both return 200 {status: ok}. If an external probe needs a backend health path, use /api/ (returns 200). /api/health does not exist (404)."},
+      {"endpoint": "POST /api/subscription/sync", "issue": "Any user can also set an arbitrary product_id and expires_at, and these are stored unvalidated on the user doc (subscription_product_id, subscription_expires_at). expires_at is never enforced, so a pro plan never expires on the server unless the client calls sync with false. A user who cancels in Play and never reopens the app stays pro."},
+      {"endpoint": "slowapi Limiter", "issue": "Still in-memory storage, carried over from iter14. Limits multiply with the number of workers or replicas."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": [], "react_native_issues": []},
+  "test_report_links": ["/app/backend/tests/test_subscription_sync_iter15.py", "/app/test_reports/pytest/pytest_results_iter15.xml"],
+  "action_items": [
+    "CRITICAL: make /api/subscription/sync verify against RevenueCat on the server. Ignore the client's entitlement_active and call RevenueCat GET /v1/subscribers/{app_user_id} (app_user_id = user.user_id, because the frontend calls Purchases.logIn(user.id)) using a SECRET RevenueCat API key from backend env. Set plan=pro only when subscriber.entitlements.pro.expires_date is null or in the future. Store expires_date from RevenueCat, not from the client.",
+    "Recommended: add a RevenueCat webhook endpoint (/api/webhook/revenuecat) protected by the Authorization header secret configured in the RC dashboard. It should handle INITIAL_PURCHASE, RENEWAL, CANCELLATION and EXPIRATION so downgrades happen even if the app is never reopened.",
+    "Recommended: enforce subscription_expires_at in user_to_out and the daily-limit check (treat an expired pro as free).",
+    "Fix the inaccurate security claim in the routes/subscription.py docstring."
+  ],
+  "critical_code_review_comments": [
+    "routes/subscription.py:48-50: grandfathering of legacy tiers works as intended. Side effect: a legacy user who buys RC Pro sees no change (fine as long as their limit is at least 500; spark has 50 and forge 200, so a legacy Spark or Forge user who pays $9.99 for Pro stays on the lower limit). Consider upgrading to pro when PLAN_LIMITS[pro] > PLAN_LIMITS[current].",
+    "routes/subscription.py:49,73: the local 'from core import PLAN_LIMITS' is unnecessary because core is already imported at module top (no circular import). Minor.",
+    "Rate limit on sync is keyed per IP, not per user. Users behind a shared NAT share the 30/min bucket. Acceptable."
+  ],
+  "updated_files": ["/app/backend/tests/test_subscription_sync_iter15.py"],
+  "success_rate": {"backend": "100% functional (13/13 tests pass), with 1 CRITICAL security design flaw (client-trusted entitlement)", "frontend": "N/A (skipped as requested)"},
+  "seed_data_creation": "One temporary user rcsync.<hex>@aiforgeqa.dev, deleted via DELETE /api/auth/me. Verified 0 leftover users. The demo account is still plan=forge.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: export $(grep EXPO_PUBLIC_BACKEND_URL /app/frontend/.env | xargs) && pytest /app/backend/tests/test_subscription_sync_iter15.py -v. The test order matters because the rate-limit tests run last. They use up the 30/min sync and 10/min login buckets for the container egress IP, so wait 60s before rerunning. After the server-side RevenueCat verification fix, test_full_lifecycle_fresh_user should FAIL to reach pro, which is the expected secure behaviour. Update it to assert plan stays 'free' for a user with no RC purchase.",
+  "rca_of_issue": "Self-upgrade RCA: sync_subscription sets target_plan = 'pro' if req.entitlement_active, and req comes straight from the request body. There is no server-to-server call to RevenueCat and no webhook. Repro: register, then POST /api/subscription/sync with Bearer and {\"entitlement_active\":true}, then GET /api/auth/me shows plan=pro and daily_limit=500. Mitigation: verify on the server with the RevenueCat REST API using a secret key, plus a signed webhook."
+}
