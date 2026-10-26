@@ -37,7 +37,7 @@ const SECTIONS: { title: string; body: string }[] = [
   {
     title: '6. Subscriptions & payments',
     body:
-      'Plans (Free / Spark / Forge / Neon Pro / Quantum / Singularity) are billed monthly through Stripe. Plan upgrades take effect immediately on payment success. You may downgrade at any time from the Plans tab; downgrade takes effect at the end of the current period. We do not refund partial periods.',
+      "AiForge offers an auto-renewing Pro subscription (weekly / monthly / yearly) and one-time Token Packs (25 / 100 / 500 tokens). All purchases are made and billed through your Google Play or Apple App Store account using the store's standard in-app purchase flow. Subscriptions auto-renew unless cancelled at least 24 hours before the end of the current period. You can manage, pause, or cancel subscriptions and request refunds directly from your store account (Google Play → Payments → Subscriptions, or Settings → Apple ID → Subscriptions). Token Packs are non-refundable one-time purchases once tokens are credited to your account. We do not refund partial subscription periods.",
   },
   {
     title: '7. Daily limits',

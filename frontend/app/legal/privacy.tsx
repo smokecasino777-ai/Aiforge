@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Shield } from 'lucide-react-native';
@@ -17,22 +17,22 @@ const SECTIONS: { title: string; body: string }[] = [
   {
     title: '2. What we collect',
     body:
-      '• Account: email address and a hashed password (we never see your raw password).\n• Content: text prompts you submit and the resulting media (images, video, 3D renders, OpenSCAD code, chat replies). These are stored under your account so you can retrieve them in your Library.\n• Usage: daily generation counts and plan/tier.\n• Payment: when you upgrade we send the request to Stripe; Stripe (not us) handles the card. We store only the Stripe session id, the amount, the plan, and your paid timestamp.\n• Device: standard server logs (IP, user-agent) for security and abuse prevention.\n• Referrals: your unique referral code and the user-id of whoever referred you, if applicable.',
+      '• Account: email address and a hashed password (we never see your raw password).\n• Content: text prompts you submit and the resulting media (images, video, 3D renders, OpenSCAD code, chat replies). These are stored under your account so you can retrieve them in your Library.\n• Usage: daily generation counts, free-tier balance, token-pack balance, and plan/tier.\n• Payment: all purchases (subscriptions and one-time token packs) are processed by Google Play Billing or Apple In-App Purchase and verified for us by RevenueCat. We never see your card number. We store only your anonymous RevenueCat app-user-id, the product id, the plan or token quantity, and the paid timestamp.\n• Device: standard server logs (IP, user-agent) for security and abuse prevention. If crash reporting is enabled we also send anonymised crash traces to Sentry.\n• Referrals: your unique referral code and the user-id of whoever referred you, if applicable.',
   },
   {
     title: '3. How we use it',
     body:
-      '• To run AiForge: authenticate you, generate AI content, save your creations, count your daily usage, and apply your plan limits.\n• To bill you: hand over payment data to Stripe and update your plan when payment succeeds.\n• To grow: when you redeem a referral code, we award the bonus to both accounts.\n• We do NOT sell your data. We do NOT show third-party ads.',
+      '• To run AiForge: authenticate you, generate AI content, save your creations, count your daily usage, and apply your plan/token limits.\n• To bill you: receive purchase receipts from RevenueCat (via Google Play or Apple) and update your plan or token balance when payment is confirmed.\n• To grow: when you redeem a referral code, we award the bonus to both accounts.\n• We do NOT sell your data. We do NOT show third-party ads.',
   },
   {
     title: '4. Third-party services we send data to',
     body:
-      '• Stripe — to process payments. See https://stripe.com/privacy.\n• OpenAI (Sora 2) — your video-generation prompts.\n• Google Gemini (Nano Banana) — your image/3D prompts.\n• Anthropic (Claude) — your chat and SCAD-code prompts.\n\nThese providers process your prompts only to fulfill the request. We send only what is necessary (prompt + minimal metadata).',
+      '• Google Play Billing & Apple In-App Purchase — process the purchase in your store account.\n• RevenueCat — relays webhooks about those purchases to our backend. See https://www.revenuecat.com/privacy.\n• OpenAI — your video, chat, voice (TTS/STT) and image prompts.\n• Google Gemini (Nano Banana) — your image/3D prompts.\n• Anthropic (Claude) — your chat and SCAD-code prompts.\n• Sentry (optional) — anonymised crash reports if a DSN is configured.\n\nThese providers process your prompts only to fulfill the request. We send only what is necessary (prompt + minimal metadata).',
   },
   {
     title: '5. Storage & security',
     body:
-      'Data is stored in a managed MongoDB instance. Passwords are hashed with bcrypt. All traffic between the app and our backend is HTTPS. Stripe keys live only on the server (never in the app bundle).',
+      'Data is stored in a managed MongoDB instance. Passwords are hashed with bcrypt. All traffic between the app and our backend is HTTPS. Billing is handled entirely by Google Play / Apple / RevenueCat — our servers never see your card details.',
   },
   {
     title: '6. Your rights',

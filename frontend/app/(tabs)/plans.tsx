@@ -376,7 +376,9 @@ export default function Plans() {
         <View style={styles.trustRow}>
           <View style={styles.trustItem}>
             <ShieldCheck color={colors.textDim} size={14} />
-            <Text style={styles.trustText}>Secured by Google Play</Text>
+            <Text style={styles.trustText}>
+              Secured by {Platform.OS === 'ios' ? 'App Store' : 'Google Play'}
+            </Text>
           </View>
           <View style={styles.trustItem}>
             <Lock color={colors.textDim} size={14} />
@@ -394,9 +396,19 @@ export default function Plans() {
         </PressableScale>
 
         <Text style={styles.disclaimer}>
-          {tab === 'pro'
-            ? 'Subscriptions are billed through your Google Play account. Auto-renews unless cancelled at least 24h before the end of the current period. Manage or cancel anytime in Google Play → Payments → Subscriptions.'
-            : 'Token packs are one-time purchases billed through your Google Play account. Tokens stay on your account until used — no auto-renewal, nothing to cancel.'}
+          {(() => {
+            // Platform-aware billing copy — the same build ships to Play and
+            // (via EAS/TestFlight) to the App Store. Hardcoding "Google Play"
+            // was a review flag on iOS.
+            const store = Platform.OS === 'ios' ? 'App Store' : 'Google Play';
+            const manage =
+              Platform.OS === 'ios'
+                ? 'Settings → Apple ID → Subscriptions'
+                : 'Google Play → Payments → Subscriptions';
+            return tab === 'pro'
+              ? `Subscriptions are billed through your ${store} account. Auto-renews unless cancelled at least 24h before the end of the current period. Manage or cancel anytime in ${manage}.`
+              : `Token packs are one-time purchases billed through your ${store} account. Tokens stay on your account until used — no auto-renewal, nothing to cancel.`;
+          })()}
         </Text>
         <View style={styles.linkRow}>
           <Text style={styles.linkText} onPress={() => router.push('/legal/terms')}>Terms</Text>
