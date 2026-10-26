@@ -67,7 +67,12 @@
           "microphonePermission": "Speak to the AI assistant hands-free"
         }
       ],
-      "@sentry/react-native"
+      [
+        "@sentry/react-native",
+        {
+          "disableAutoUpload": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
