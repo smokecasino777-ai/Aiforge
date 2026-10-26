@@ -9,8 +9,8 @@ This file is memory for a later agent that may need to call the integration prox
 - entitlement_lookup_key: pro
 - offering_lookup_key: default
 - Packages (package -> product_id, current price):
-  - $rc_monthly -> prod77b31683df   ($9.99 / P1M, trial: none)
-  - $rc_annual  -> prod8cf02917ae   ($79.99 / P1Y, trial: none — NOT shown in UI; frontend filters to monthly only)
+  - $rc_monthly -> prod77b31683df   ($9.99 / P1M, **7-day free trial P1W**)
+  - $rc_annual  -> prod8cf02917ae   ($79.99 / P1Y, no trial, SAVE 33% positioning)
 - Dashboard: https://app.revenuecat.com/projects/proj63cca90c
 - Bundle id / Android package: `app.emergent.fierceforgeios2c75fc60`
 
@@ -59,8 +59,9 @@ Needed ONLY for REAL purchases in published store builds. Test Store (Expo Go / 
   - https://support.google.com/googleplay/android-developer/answer/7161426
 - Step 3 — Create matching in-app purchase products in Google Play Console
   using the SAME product IDs shown in the RevenueCat dashboard:
-  - prod77b31683df — monthly auto-renew subscription ($9.99)
-  - (optional later: prod8cf02917ae — annual at $79.99)
+  - **prod77b31683df** — monthly auto-renew subscription at **$9.99**, with a **7-day FREE TRIAL** base plan (RevenueCat already set `trial: P1W`; the Play Console product must also offer a 7-day free trial as a base plan or offer tag so Google Play surfaces it)
+  - **prod8cf02917ae** — annual auto-renew subscription at **$79.99** (no trial)
+  - Both subscriptions share the same subscription group so users can upgrade/downgrade between them without re-purchasing
   - Reference: https://support.google.com/googleplay/android-developer/answer/140504
 - Step 4 — Build + closed testing track upload. Test with license tester accounts, then submit for review.
 - iOS steps are DEFERRED (user is Android-only for now).
