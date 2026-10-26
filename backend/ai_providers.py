@@ -46,27 +46,10 @@ def azure_video_enabled() -> bool:
 
 
 # ---------------- TEXT ----------------
-async def generate_text(system: str, prompt: str) -> str:
-    """Chat completion. Azure gpt-4o primary; Emergent Claude only if Azure
-    text env is not configured at all."""
-    if azure_text_enabled():
-        async with httpx.AsyncClient(timeout=90) as client:
-            r = await client.post(
-                f"{AZURE_OPENAI_BASE}/chat/completions",
-                headers=_AZ_HEADERS,
-                json={
-                    "model": AZURE_CHAT_DEPLOYMENT,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "max_tokens": 4000,
-                },
-            )
-        if r.status_code != 200:
-            raise RuntimeError(f"Azure chat error {r.status_code}: {r.text[:200]}")
-        return (r.json()["choices"][0]["message"]["content"] or "").strip()
-
+async def _generate_emergent_text(system: str, prompt: str) -> str:
+    """Run the existing non-streaming text fallback for JSON/text endpoints."""
+    if not EMERGENT_LLM_KEY:
+        raise RuntimeError("No fallback text provider is configured")
     from emergentintegrations.llm.chat import LlmChat, UserMessage
 
     chat = LlmChat(
@@ -75,6 +58,32 @@ async def generate_text(system: str, prompt: str) -> str:
         system_message=system,
     ).with_model("anthropic", "claude-sonnet-4-6")
     return await chat.send_message(UserMessage(text=prompt))
+
+
+async def generate_text(system: str, prompt: str) -> str:
+    """Chat completion with Azure primary and Emergent fallback on Azure errors."""
+    if azure_text_enabled():
+        try:
+            async with httpx.AsyncClient(timeout=90) as client:
+                r = await client.post(
+                    f"{AZURE_OPENAI_BASE}/chat/completions",
+                    headers=_AZ_HEADERS,
+                    json={
+                        "model": AZURE_CHAT_DEPLOYMENT,
+                        "messages": [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": prompt},
+                        ],
+                        "max_tokens": 4000,
+                    },
+                )
+            if r.status_code == 200:
+                return (r.json()["choices"][0]["message"]["content"] or "").strip()
+            logger.warning("Azure text returned HTTP %s; using Emergent fallback", r.status_code)
+        except httpx.HTTPError as exc:
+            logger.warning("Azure text request failed (%s); using Emergent fallback", type(exc).__name__)
+
+    return await _generate_emergent_text(system, prompt)
 
 
 # ---------------- IMAGE ----------------

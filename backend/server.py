@@ -74,6 +74,12 @@ async def root():
     return {"name": "AiForge API", "status": "ok"}
 
 
+@api.get("/health")
+async def api_health():
+    """Ingress-compatible API health check for monitors that require an /api prefix."""
+    return {"name": "AiForge API", "status": "ok"}
+
+
 # ----- Routers -----
 api.include_router(legal.router)
 api.include_router(assets.router)

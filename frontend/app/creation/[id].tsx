@@ -15,6 +15,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import {
   ArrowLeft,
   Download,

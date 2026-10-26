@@ -397,3 +397,55 @@ agent_communication:
         Stripe key rotation path (Profile → Owner · App Secrets) remains the
         documented way to go live; user must roll a fresh key in Stripe
         Dashboard, NOT paste in chat.
+
+release_build:
+  - task: "Android AAB release-build configuration"
+    implemented: true
+    working: "pending verification"
+    file: "/app/frontend/eas.json"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "user"
+        comment: "User reported that the Play Store build keeps failing, without build-log text."
+      - working: "pending verification"
+        agent: "main"
+        comment: "Found no eas.json in the Expo project. Added explicit preview APK and production Android App Bundle profiles."
+      - working: true
+        agent: "main"
+        comment: "Validated JSON and Expo prebuild config; Android Metro export completed successfully with 3,950 modules and 25 assets. The first local bytecode attempt only failed because this ARM container cannot execute React Native's bundled x64 Hermes binary; --no-bytecode export completed cleanly. Preview also rendered after restart."
+      - working: true
+        agent: "testing"
+        comment: "Release regression report iteration_19 independently confirmed the AAB profile, Android config/plugin resolution, Android no-bytecode export, backend health, and mobile preview."
+
+backend_followup:
+  - task: "Azure text fallback for caption and text generation"
+    implemented: true
+    working: true
+    file: "/app/backend/ai_providers.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "testing"
+        comment: "Iteration_19 found POST /api/editor/caption returning 502 because Azure returned 401 PermissionDenied."
+      - working: true
+        agent: "main"
+        comment: "Azure HTTP and network failures now use the existing Emergent Claude fallback. Verified with an authenticated caption request: 200 with hook, caption, and hashtag list."
+  - task: "Ingress-compatible API health check"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "testing"
+        comment: "Iteration_19 noted that GET /api/health was absent while root health probes worked."
+      - working: true
+        agent: "main"
+        comment: "Added GET /api/health and verified it returns HTTP 200 with status ok."

@@ -120,3 +120,9 @@ See `/app/memory/test_credentials.md`.
   - Home: new "Free tokens expire in Xd" chip (`FreeTokensBadge`) under the usage bar — pulls from `/tokens/balance`, swaps colour to pink at ≤5 days left, falls back to "Out of free gens — tap to grab a token pack" when both free_gens and tokens_balance are 0. Taps route to Plans.
 - **Launch artifact**: `/app/memory/LAUNCH_CHECKLIST.md` fully refreshed with Play Console / RevenueCat / Secrets / build / smoke-test sections.
 - Known non-blockers for tonight’s launch (documented in LAUNCH_CHECKLIST §6): Azure chat key 401 (502s on chat/SCAD, image+video unaffected), Emergent sora-2 404 (video jobs refund 3 tokens cleanly), invalid Sentry DSN (safe-guarded).
+
+## Update (2026-10 — release build configuration)
+- Added `frontend/eas.json` with an explicit `production` Android `app-bundle` profile, so release builds always create a Play Store compatible `.aab`. The missing EAS project profile was the most likely cause of the reported build-generation failure when no build log was available.
+- Corrected two Android bundle-time source issues: the creation detail's native video player now imports `expo-video`, and the editor uses Expo's supported legacy file API import for cache reads/writes.
+- Azure text errors (including the current 401) now fall back to the already-configured Emergent Claude provider, keeping caption, chat, and SCAD text flows available while the Azure credential is repaired.
+- Added `/api/health` alongside existing root health probes for ingress-compatible monitoring.

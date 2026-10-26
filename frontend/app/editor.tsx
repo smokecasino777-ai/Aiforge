@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -17,8 +17,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
-import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system/legacy';
 import { captureRef } from 'react-native-view-shot';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import {
@@ -34,7 +33,6 @@ import {
   Type as TypeIcon,
   RefreshCcw,
   Upload,
-  Image as ImageIcon,
   FolderOpen,
   Sparkles,
   Palette,
@@ -44,15 +42,13 @@ import {
   Wand2,
   Trash2,
   Play,
-  Pause,
 } from 'lucide-react-native';
 import StarryBackground from '@/src/components/StarryBackground';
 import PressableScale from '@/src/components/PressableScale';
 import PulsingLogo from '@/src/components/Logo';
 import FeatureTour from '@/src/components/FeatureTour';
 import { colors, radius } from '@/src/theme/colors';
-import { api, Creation, BACKEND_URL } from '@/src/api/client';
-import { useAuth } from '@/src/context/AuthContext';
+import { api, Creation } from '@/src/api/client';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -95,7 +91,6 @@ const STYLE_PRESETS = [
 export default function Editor() {
   const router = useRouter();
   const { source } = useLocalSearchParams<{ source?: string }>();
-  const { user } = useAuth();
   const canvasRef = useRef<View>(null);
 
   const [stage, setStage] = useState<Stage>({ kind: 'empty' });
