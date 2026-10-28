@@ -17,7 +17,7 @@ const SECTIONS: { title: string; body: string }[] = [
   {
     title: '2. The service',
     body:
-      'AiForge is an AI-powered creation tool. You send text prompts; we route them through third-party AI models (OpenAI Sora 2 for video, Google Gemini Nano Banana for images and 3D, Anthropic Claude for chat and OpenSCAD code) and return the result. Generated content is saved to your private Library.',
+      'AiForge is an AI creation and editing studio. Enabled AI tools use supported third-party models after an accepted credit quote. Unavailable, unpriced or unfunded models are paused. Video generation currently awaits a verified supported replacement; local video editing and STL tools remain available. 3D-style images are not meshes. OpenSCAD previews are approximate; STL Mesh Studio edits actual imported geometry.',
   },
   {
     title: '3. Your account',
@@ -37,17 +37,17 @@ const SECTIONS: { title: string; body: string }[] = [
   {
     title: '6. Subscriptions & payments',
     body:
-      "AiForge offers an auto-renewing Pro subscription (weekly / monthly / yearly) and one-time Token Packs (25 / 100 / 500 tokens). All purchases are made and billed through your Google Play or Apple App Store account using the store's standard in-app purchase flow. Subscriptions auto-renew unless cancelled at least 24 hours before the end of the current period. You can manage, pause, or cancel subscriptions and request refunds directly from your store account (Google Play → Payments → Subscriptions, or Settings → Apple ID → Subscriptions). Token Packs are non-refundable one-time purchases once tokens are credited to your account. We do not refund partial subscription periods.",
+      'Android digital purchases use Google Play Billing through RevenueCat; iOS uses Apple In-App Purchase. New monthly plans provide fixed credits, not unlimited generations. Localized prices and renewal terms appear in the store confirmation. Monthly credits refresh on the paid billing anniversary; unused credits expire at billing-period end. One-time purchased credits do not expire or require a subscription. Expiring credits are used first. Pending payments grant no credits. Products without verified setup and funded reserves stay unavailable. Existing purchased balances and contractual benefits are preserved separately; any migration requires applicable notice or consent. Subscriptions renew until cancelled before the next renewal in the store account. Refunds follow store policies and applicable law; refunded credits or access may be revoked. Restore recovers eligible subscriptions, not consumed purchases. Deleting an account does not cancel store subscriptions. Legacy web checkout remains separate from Android.',
   },
   {
-    title: '7. Daily limits',
+    title: '7. Quotes & usage limits',
     body:
-      'Each plan includes a daily generation quota. When you hit the cap, generation requests return HTTP 402 until the next UTC day or until you upgrade. We may adjust limits to keep the service available for everyone; we will not silently lower YOUR plan unless we publicly announce the change.',
+      'Each enabled AI action has a fixed credit quote and bounded input/output settings. Higher-cost alternatives require a new approved quote. Failed requests release the customer credit reservation; uncertain interrupted requests may remain pending during reconciliation. Credits cannot be transferred, traded or withdrawn and have no cash value. Local editing and browsing use no AI credits. Existing purchased daily-quota contracts remain separate from the new catalog.',
   },
   {
     title: '8. Referral program',
     body:
-      'Each user gets a unique referral code (e.g. AF-XXXXXX). When a friend signs up using your code, both accounts receive a +20 generations/day bonus for 7 days. Referral bonuses are non-transferable and have no cash value. We may modify or end the program at any time with reasonable notice.',
+      'Eligible new accounts may receive 100 introductory credits once, valid for 30 days after grant, subject to funded availability and abuse controls. They do not replenish daily. New referrals do not automatically grant a daily bonus. Promotional credits cannot be transferred or redeemed for cash. Existing historical bonus records remain valid until their stated expiry.',
   },
   {
     title: '9. Termination',
@@ -95,14 +95,14 @@ export default function Terms() {
             <FileText size={20} color={colors.green} />
             <Text style={styles.title}>Terms of Service</Text>
           </View>
-          <Text style={styles.updated}>Last updated: June 2026</Text>
+          <Text style={styles.updated} testID="terms-updated">Last updated: October 2026</Text>
           <Text style={styles.intro}>
             These are the rules of the road for using AiForge. Plain English, no surprises.
           </Text>
           {SECTIONS.map((s) => (
             <View key={s.title} style={styles.section}>
               <Text style={styles.sectionTitle}>{s.title}</Text>
-              <Text style={styles.sectionBody}>{s.body}</Text>
+              <Text style={styles.sectionBody} testID={`terms-section-${s.title.split('.')[0]}`}>{s.body}</Text>
             </View>
           ))}
           <View style={{ height: 60 }} />

@@ -7,7 +7,7 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
-import { useLocalSearchParams, useFocusEffect, useRouter } from 'expo-router';
+import { useLocalSearchParams, useFocusEffect, useRouter, usePathname } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LayoutGrid, ImageIcon, Video, Box, MessageSquare } from 'lucide-react-native';
 import StarryBackground from '@/src/components/StarryBackground';
@@ -29,6 +29,7 @@ const FILTERS: { id: Filter; label: string; Icon: any; color: string }[] = [
 ];
 
 export default function Library() {
+  const pathname = usePathname();
   const params = useLocalSearchParams<{ type?: string }>();
   const router = useRouter();
   const initialFilter = (params.type as Filter) || 'all';
@@ -62,7 +63,7 @@ export default function Library() {
   };
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} testID={pathname.endsWith('/library') ? 'library-screen-active' : 'library-screen-inactive'}>
       <StarryBackground />
       <GhostLogoBackground />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>

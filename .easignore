@@ -1,0 +1,22 @@
+# EAS builds only the Expo client. Keep local/generated native projects out
+# so app.json and config plugins are applied by clean Expo prebuild.
+**/node_modules/
+**/.expo/
+**/.gradle/
+**/build/
+**/dist/
+/frontend/android/
+/frontend/ios/
+/backend/
+/tests/
+/test_reports/
+/memory/
+/test_result.md
+**/__pycache__/
+**/*.log
+**/*.jks
+**/*.keystore
+**/*credentials*.json
+/.git/
+/.emergent/
+# frontend/.env contains the public mobile configuration and is kept.

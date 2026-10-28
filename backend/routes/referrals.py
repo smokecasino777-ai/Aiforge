@@ -21,7 +21,7 @@ async def referrals_me(user: dict = Depends(get_current_user)):
         "bonus_amount": out.bonus_amount,
         "bonus_until": out.bonus_until,
         "share_text": (
-            f"Join me on AiForge \u2014 use code {code} when you sign up and we both get "
-            f"+20 generations/day for a week! https://aiforge.app"
+            f"Join me on AiForge — use referral code {code} when you sign up. "
+            "Introductory credits are subject to eligibility and the funded promotional budget."
         ),
     }

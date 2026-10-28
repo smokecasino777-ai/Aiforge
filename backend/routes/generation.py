@@ -23,8 +23,10 @@ from core import (
     token_cost_for,
 )
 from models import ChatRequest, CreationOut, GenerateRequest, ScadRequest
+from metering import MeteredRoute, current_quote
+from media_storage import store_document_media, get_media
 
-router = APIRouter(tags=["generation"])
+router = APIRouter(tags=["generation"], route_class=MeteredRoute)
 
 
 # ---------- Capacity gate (shared) ----------
@@ -46,6 +48,9 @@ async def _reserve_capacity(user: dict, gen_type: str) -> tuple[str, int, str]:
       source : 'free' | 'tokens' | 'daily'
     Raises 402 if the user is out of capacity.
     """
+    quoted = current_quote.get()
+    if quoted and not quoted.get("legacy"):
+        return "credits", 0, "credits"
     plan = (user.get("plan") or "free").lower()
     if plan == "pro" or plan in LEGACY_PAID_TIERS:
         limit = PLAN_LIMITS.get(plan, 5)
@@ -71,7 +76,7 @@ async def _reserve_capacity(user: dict, gen_type: str) -> tuple[str, int, str]:
             status_code=402,
             detail=(
                 "You're out of generations. "
-                "Grab a token pack (one-time) or go Pro for unlimited daily gens."
+                "Choose a monthly credit allowance or a one-time credit pack."
             ),
         )
     return "tokens", cost, source
@@ -139,7 +144,9 @@ async def _process_video_job(
         )
 
 
-def _doc_to_creation(doc: dict) -> CreationOut:
+async def _doc_to_creation(doc: dict) -> CreationOut:
+    if doc.get("storage_path") and not doc.get("media_data"):
+        doc = {**doc, "media_data": base64.b64encode(await get_media(doc["storage_path"])).decode()}
     return CreationOut(
         id=doc["creation_id"],
         type=doc["type"],
@@ -188,9 +195,9 @@ async def generate(
             await _refund_capacity(user["user_id"], mode, cost, source)
             raise HTTPException(status_code=502, detail=f"Generation failed: {str(e)[:200]}")
         base_doc.update({"status": "ready", "media_data": b64, "media_mime": mime})
-        await db.creations.insert_one(base_doc)
+        await db.creations.insert_one(await store_document_media(base_doc.copy()))
         await _confirm_capacity(user["user_id"], mode)
-        return _doc_to_creation(base_doc)
+        return await _doc_to_creation(base_doc)
 
     if req.type == "video":
         base_doc.update({"status": "processing", "duration": req.duration or 4})
@@ -207,7 +214,7 @@ async def generate(
             cost,
             source,
         )
-        return _doc_to_creation(base_doc)
+        return await _doc_to_creation(base_doc)
 
     if req.type == "chat":
         try:
@@ -230,7 +237,7 @@ async def generate(
         )
         await db.creations.insert_one(base_doc)
         await _confirm_capacity(user["user_id"], mode)
-        return _doc_to_creation(base_doc)
+        return await _doc_to_creation(base_doc)
 
     # Unknown type — refund whatever we reserved.
     await _refund_capacity(user["user_id"], mode, cost, source)
@@ -250,7 +257,9 @@ async def chat_endpoint(req: ChatRequest, user: dict = Depends(get_current_user)
         {"_id": 0, "messages": 1},
     )
     history: List[dict] = (transcript_doc or {}).get("messages", []) or []
-    history = history[-30:]
+    history = history[-8:]
+    # Bound cumulative context as well as the latest prompt.
+    history = [{**m, "text": m.get("text", "")[:2000]} for m in history]
 
     try:
         system = (
@@ -325,10 +334,8 @@ async def generate_scad(req: ScadRequest, user: dict = Depends(get_current_user)
             code = code.rsplit("```", 1)[0]
 
     preview_b64: Optional[str] = None
-    try:
-        preview_b64, _ = await _generate_image_sync(req.prompt, style_3d=True)
-    except Exception as e:
-        logger.warning(f"SCAD preview image failed: {e}")
+    # SCAD is quoted as source generation only. The local CAD preview does
+    # not secretly make a second, unquoted image-provider request.
 
     creation_id = f"cr_{uuid.uuid4().hex[:14]}"
     doc = {
@@ -346,7 +353,7 @@ async def generate_scad(req: ScadRequest, user: dict = Depends(get_current_user)
     }
     await db.creations.insert_one(doc)
     await _confirm_capacity(user["user_id"], mode)
-    return _doc_to_creation(doc)
+    return await _doc_to_creation(doc)
 
 
 # ---------- Creations CRUD ----------
@@ -362,7 +369,7 @@ async def list_creations(
     docs = (
         await db.creations.find(q, {"_id": 0}).sort("created_at", -1).to_list(limit)
     )
-    return [_doc_to_creation(d) for d in docs]
+    return [await _doc_to_creation(d) for d in docs]
 
 
 @router.get("/creations/stats")
@@ -384,7 +391,7 @@ async def get_creation(creation_id: str, user: dict = Depends(get_current_user))
     )
     if not doc:
         raise HTTPException(status_code=404, detail="Not found")
-    return _doc_to_creation(doc)
+    return await _doc_to_creation(doc)
 
 
 @router.delete("/creations/{creation_id}")

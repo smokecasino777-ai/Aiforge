@@ -382,6 +382,14 @@ async def get_current_user(
         except Exception:
             # Malformed timestamp — fail safe (reject).
             raise HTTPException(status_code=401, detail="Invalid session.")
+    # A delayed/missing expiration webhook must not leave paid API access
+    # enabled forever. This affects only verified RevenueCat subscriptions.
+    if user.get("plan") == "pro" and user.get("subscription_source") == "revenuecat":
+        try:
+            if datetime.fromisoformat(user.get("subscription_expires_at") or "") <= now_utc():
+                user["plan"] = "free"
+        except (ValueError, TypeError):
+            user["plan"] = "free"
     return user
 
 
@@ -408,6 +416,13 @@ from models import UserOut  # noqa: E402
 
 
 async def user_to_out(user: dict) -> UserOut:
+    if user.get("picture_storage_path"):
+        from media_storage import get_media
+        try:
+            import base64
+            user = {**user, "picture": "data:image/png;base64," + base64.b64encode(await get_media(user["picture_storage_path"])).decode()}
+        except HTTPException:
+            user = {**user, "picture": None}
     used = await daily_used(user["user_id"])
     plan = user.get("plan", "free")
     base_limit = PLAN_LIMITS.get(plan, 5)
@@ -446,6 +461,8 @@ async def user_to_out(user: dict) -> UserOut:
         free_gens_remaining=free_gens_remaining,
         free_gens_expires_at=expires_at if free_valid else None,
         tokens_balance=tokens_balance,
+        credit_catalog_version=user.get("credit_catalog_version"),
+        credit_plan=user.get("credit_plan"),
     )
 
 

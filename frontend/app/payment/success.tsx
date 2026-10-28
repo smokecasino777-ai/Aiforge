@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Platform } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CheckCircle2 } from 'lucide-react-native';
 import StarryBackground from '@/src/components/StarryBackground';
@@ -12,6 +12,11 @@ import { api } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
 
 export default function PaymentSuccess() {
+  if (Platform.OS !== 'web') return <Redirect href="/(tabs)/plans" />;
+  return <WebPaymentSuccess />;
+}
+
+function WebPaymentSuccess() {
   const router = useRouter();
   const params = useLocalSearchParams<{ session_id?: string }>();
   const { refresh, user } = useAuth();

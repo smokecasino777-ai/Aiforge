@@ -1,7 +1,10 @@
 import { storage } from '@/src/utils/storage';
+import { Platform } from 'react-native';
+import { METERED_PATHS, requestCreditQuote } from '@/src/lib/creditQuote';
 
 const BASE = process.env.EXPO_PUBLIC_BACKEND_URL as string;
 const API = `${BASE}/api`;
+export const API_URL = API;
 const TOKEN_KEY = 'aiforge_token';
 
 // Short-lived sudo token for the locked admin panel. Memory-only by design:
@@ -25,6 +28,8 @@ export type User = {
   free_gens_remaining?: number;
   free_gens_expires_at?: string | null;
   tokens_balance?: number;
+  credit_catalog_version?: string | null;
+  credit_plan?: string | null;
 };
 
 export type Creation = {
@@ -60,11 +65,14 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(await authHeaders()),
-    ...(path.startsWith('/admin') && adminUnlockToken
+    ...((path.startsWith('/admin') || path.startsWith('/credits/admin')) && adminUnlockToken
       ? { 'X-Admin-Unlock': adminUnlockToken }
       : {}),
     ...(init.headers as Record<string, string> | undefined),
   };
+  if (init.method === 'POST' && METERED_PATHS.has(path)) {
+    headers['X-Credit-Quote'] = await requestCreditQuote({ apiBase: API, path, payload: JSON.parse(String(init.body || '{}')), headers });
+  }
   const res = await fetch(`${API}${path}`, { ...init, headers });
   if (!res.ok) {
     let detail = `Request failed: ${res.status}`;
@@ -79,6 +87,14 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  async creditsWallet() { return request<any>('/credits/wallet'); },
+  async creditsCatalog() { return request<any>('/credits/catalog'); },
+  async creditsHistory() { return request<any>('/credits/history'); },
+  async creditIntent(catalogId: string) { return request<{ intent_id: string }>('/credits/purchase-intent', { method: 'POST', body: JSON.stringify({ catalog_id: catalogId }) }); },
+  async cancelCreditIntent(intentId: string) { return request('/credits/purchase-intent/cancel', { method: 'POST', body: JSON.stringify({ intent_id: intentId }) }); },
+  async creditBudget() { return request<any>('/credits/admin/budget'); },
+  async updateCreditBudget(payload: unknown) { return request('/credits/admin/budget', { method: 'PUT', body: JSON.stringify(payload) }); },
+  async updateCreditRate(payload: unknown) { return request('/credits/admin/rate', { method: 'PUT', body: JSON.stringify(payload) }); },
   async register(email: string, password: string, name?: string, referralCode?: string) {
     return request<{ token: string; user: User }>('/auth/register', {
       method: 'POST',
@@ -158,12 +174,14 @@ export const api = {
     return request<Plan[]>('/plans');
   },
   async createCheckout(plan: string, originUrl: string) {
+    if (Platform.OS !== 'web') throw new Error('Use in-app purchases through your app store.');
     return request<{ url: string; session_id: string }>('/checkout/create', {
       method: 'POST',
       body: JSON.stringify({ plan, origin_url: originUrl }),
     });
   },
   async checkoutStatus(sessionId: string) {
+    if (Platform.OS !== 'web') throw new Error('Web checkout is not available in the mobile app.');
     return request<{
       session_id: string;
       status: string;
@@ -277,10 +295,10 @@ export const api = {
     });
   },
   // ---- Avatar Maker ----
-  async avatarGenerate(prompt: string, style: string) {
+  async avatarGenerate(prompt: string, style: string, options?: { background: string; framing: string }) {
     return request<{ creation_id: string; image_b64: string; media_mime: string; style: string }>(
       '/avatar/generate',
-      { method: 'POST', body: JSON.stringify({ prompt, style }) },
+      { method: 'POST', body: JSON.stringify({ prompt, style, ...options }) },
     );
   },
   async avatarSet(image_b64: string, media_mime = 'image/png') {
@@ -293,14 +311,10 @@ export const api = {
     return request<{ ok: boolean; user: any }>('/avatar/clear', { method: 'POST' });
   },
   // ---- Subscriptions (RevenueCat-driven) ----
-  async syncSubscription(payload: {
-    entitlement_active: boolean;
-    product_id?: string;
-    expires_at?: string | null;
-  }) {
+  async syncSubscription() {
     return request<{ ok: boolean; plan: string; daily_limit: number }>('/subscription/sync', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({}),
     });
   },
   // ---- Tokens (free gens + paid consumable packs via RevenueCat) ----
@@ -331,10 +345,13 @@ export const api = {
   // ---- Voice (TTS + STT) ----
   async ttsFetchAudio(text: string, voice?: string): Promise<ArrayBuffer> {
     const token = await storage.secureGet<string>(TOKEN_KEY, '');
+    const payload = JSON.parse(JSON.stringify({ text, voice }));
+    const quoteId = await requestCreditQuote({ apiBase: API, path: '/voice/tts', payload, headers: token ? { Authorization: `Bearer ${token}` } : {} });
     const r = await fetch(`${BASE}/api/voice/tts`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-Credit-Quote': quoteId,
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({ text, voice }),

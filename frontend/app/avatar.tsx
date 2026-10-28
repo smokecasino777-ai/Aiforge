@@ -45,6 +45,7 @@ import FeatureTour from '@/src/components/FeatureTour';
 import { colors, radius } from '@/src/theme/colors';
 import { api } from '@/src/api/client';
 import { useAuth } from '@/src/context/AuthContext';
+import { Ionicons } from '@expo/vector-icons';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -74,6 +75,9 @@ export default function AvatarMaker() {
   const [generated, setGenerated] = useState<{ image_b64: string; media_mime: string; style: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [activating, setActivating] = useState(false);
+  const [background, setBackground] = useState('studio');
+  const [framing, setFraming] = useState('headshot');
+  const [message, setMessage] = useState('');
 
   // Loading ring animation
   const ringProgress = useSharedValue(0);
@@ -95,6 +99,7 @@ export default function AvatarMaker() {
   } as any));
 
   const onGenerate = async () => {
+    if (busy) return;
     const p = prompt.trim();
     if (p.length < 3) {
       Alert.alert('Avatar', 'Describe your avatar in a sentence (e.g. "a confident hacker with neon hair").');
@@ -102,9 +107,11 @@ export default function AvatarMaker() {
     }
     try {
       setBusy(true);
-      const r = await api.avatarGenerate(p, style);
+      const r = await api.avatarGenerate(p, style, { background, framing });
       setGenerated({ image_b64: r.image_b64, media_mime: r.media_mime, style: r.style });
+      setMessage('Avatar saved privately in your Library. Review it before setting your profile.');
     } catch (e: any) {
+      setMessage(e.message || 'Avatar generation unavailable.');
       Alert.alert('Avatar', e.message || 'Generation failed');
     } finally {
       setBusy(false);
@@ -247,6 +254,13 @@ export default function AvatarMaker() {
             </Animated.View>
 
             {/* Styles */}
+            {!!message && <Text testID="avatar-message" style={[styles.subtitle, { color: colors.cyan }]}>{message}</Text>}
+            <View style={{ gap: 14 }}>
+              <Text style={styles.sectionLabel}>BACKGROUND & FRAMING</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{['studio', 'city', 'nature'].map((value) => <PressableScale key={value} testID={`avatar-background-${value}`} onPress={() => setBackground(value)} style={{ minHeight: 44, padding: 12, borderRadius: 16, backgroundColor: background === value ? colors.cyan + '22' : colors.surface }}><Text style={{ color: colors.text }}>{value}</Text></PressableScale>)}</View>
+              <View style={{ flexDirection: 'row', gap: 8 }}>{['headshot', 'shoulders'].map((value) => <PressableScale key={value} testID={`avatar-framing-${value}`} onPress={() => setFraming(value)} style={{ minHeight: 44, padding: 12, borderRadius: 16, backgroundColor: framing === value ? colors.pink + '22' : colors.surface }}><Text style={{ color: colors.text }}>{value === 'headshot' ? 'Close portrait' : 'Head & shoulders'}</Text></PressableScale>)}</View>
+              <Text testID="avatar-credit-notice" style={styles.subtitle}>Each new avatar or retry gets a fresh credit quote. Setting an existing avatar as your profile does not use AI credits.</Text>
+            </View>
             <Animated.View entering={FadeInDown.delay(120).duration(400)}>
               <Text style={styles.sectionLabel}>STYLE</Text>
               <ScrollView
@@ -268,7 +282,7 @@ export default function AvatarMaker() {
                           colors={[active ? s.color + '44' : 'transparent', 'transparent']}
                           style={StyleSheet.absoluteFill}
                         />
-                        <Text style={styles.styleEmoji}>{s.emoji}</Text>
+                        <Ionicons name="person-circle-outline" size={28} color={s.color} />
                         <Text style={[styles.styleLabel, active && { color: s.color }]}>{s.label}</Text>
                         <Text style={styles.styleBlurb}>{s.blurb}</Text>
                       </View>
@@ -283,7 +297,7 @@ export default function AvatarMaker() {
               <Text style={styles.sectionLabel}>IDEAS</Text>
               <View style={styles.ideaWrap}>
                 {PROMPT_IDEAS.map((p) => (
-                  <PressableScale key={p} onPress={() => setPrompt(p)}>
+                  <PressableScale key={p} testID={`avatar-idea-${PROMPT_IDEAS.indexOf(p)}`} onPress={() => setPrompt(p)}>
                     <View style={styles.ideaPill}>
                       <Sparkles size={11} color={colors.cyan} />
                       <Text style={styles.ideaText}>{p}</Text>

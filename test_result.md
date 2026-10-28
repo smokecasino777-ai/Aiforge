@@ -103,10 +103,10 @@
 #====================================================================================================
 
 user_problem_statement: |
-  Build AiForge mobile app (Expo + FastAPI). This iteration: do all
-  "recommended" cleanup + features and add a secure in-app box where the user
-  can enter their Stripe secret key (instead of pasting it in chat where Stripe
-  auto-revokes it).
+  CURRENT RELEASE SCOPE: User requests fixing AiForge for Google Play AAB,
+  current Play Billing standards, and review of uploaded Play Console PDF.
+  Historical sections below describe older work, not current payment flow.
+  Native app uses RevenueCat 10.15.1 / Play Billing 8.3.0; no Stripe checkout.
 
 backend:
   - task: "Admin Stripe-key endpoints (GET/POST/DELETE + /admin/me)"
@@ -230,10 +230,12 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Admin Stripe-key endpoints (GET/POST/DELETE + /admin/me)"
-    - "Hot-swap STRIPE_API_KEY (no restart)"
-    - "Admin Secrets page (secure Stripe-key box)"
-    - "Interactive 3D SCAD viewer with STL export"
+    - "Android release source export, clean prebuild and .easignore native exclusion"
+    - "RevenueCat platform-key guard, current account identity and restore state"
+    - "Verified subscription timestamps, expiration and read-only sync"
+    - "Atomic token credit/retry/refund, duplicates and receipt validation"
+    - "Plans accurate localized pricing, no false trials/unlimited claims or native web checkout"
+    - "Legal API links and mobile onset/onboarding resizing"
     - "Onboarding tutorial slideshow"
   stuck_tasks: []
   test_all: false
@@ -449,3 +451,35 @@ backend_followup:
       - working: true
         agent: "main"
         comment: "Added GET /api/health and verified it returns HTTP 200 with status ok."
+
+release_followup_2026_10_27:
+  working: "testing pending"
+  needs_retesting: true
+  agent: main
+  summary: |
+    Read supplied Play Console PDF. Actual /app remotes match named repo,
+    but active branch codespace-special-spork-4qq7969947963v4j differs from
+    authorized purge branches: stopped all remote/history write actions.
+    No EAS commands allowed by environment, no Play Console access confirmed,
+    highest versionCode unknown. Kept package and version unchanged.
+    Fixed 3 TypeScript errors; tsc + expo dependency check pass.
+    Android no-bytecode export /tmp/aiforge-android-release-js passed.
+    Clean prebuild /tmp/aiforge-clean-native-T7RGVW passed. Does NOT prove AAB signing.
+    EAS archive excludes generated native trees so plugins/app.json apply.
+    Added minimal media/overlay permissions exclusions.
+    RevenueCat connected via managed proxy; native SDK dependency verified:
+    RN10.15.1 -> hybrid19.14.1 -> Android10.28.1 -> Billing8.3.0.
+    Scoped billing identity to actual SDK getAppUserID and backend account,
+    removed original-anonymous-ID rejection bug and account-cache leakage.
+    Restore uses returned CustomerInfo, not stale React state. Missing webhook
+    confirmation shows pending, not an invented success. Added refresh/manage.
+    Fixed entitlement/timestamp validation, old events, expiry access guard,
+    duplicate/crash-retry-safe token credit and refund handling. Server DB state
+    never trusts entitlement_active client claims. Production rejects Test Store.
+    Removed misleading unlimited/12k users/guaranteed7day trial copy; corrected
+    refund wording and billing-data privacy in app + public API legal pages.
+    Native web checkout callbacks redirect to Plans, API client rejects checkout,
+    admin Stripe panel remains web-only. No provider keys or passwords changed.
+    Check all changes, screenshots 390x844, no paid AI calls or real purchases.
+    Use credentials from private memory file only; NEVER include credentials
+    or secret values in reports, screenshots, fixtures or command output.

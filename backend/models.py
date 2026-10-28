@@ -35,6 +35,8 @@ class UserOut(BaseModel):
     free_gens_expires_at: Optional[str] = None
     # Purchased consumable tokens (RevenueCat NON_RENEWING_PURCHASE).
     tokens_balance: int = 0
+    credit_catalog_version: Optional[str] = None
+    credit_plan: Optional[str] = None
 
 
 class AuthResponse(BaseModel):
@@ -72,7 +74,7 @@ class CreationOut(BaseModel):
     created_at: str
     width: Optional[int] = None
     height: Optional[int] = None
-    duration: Optional[int] = None
+    duration: Optional[float] = None
 
 
 class CheckoutRequest(BaseModel):

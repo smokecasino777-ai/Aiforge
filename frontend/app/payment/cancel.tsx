@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet, Platform } from 'react-native';
+import { Redirect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { XCircle } from 'lucide-react-native';
 import StarryBackground from '@/src/components/StarryBackground';
@@ -16,6 +16,7 @@ import { colors } from '@/src/theme/colors';
  */
 export default function PaymentCancel() {
   const router = useRouter();
+  if (Platform.OS !== 'web') return <Redirect href="/(tabs)/plans" />;
   return (
     <SafeAreaView style={styles.root}>
       <StarryBackground />

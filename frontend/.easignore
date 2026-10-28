@@ -1,0 +1,13 @@
+# Also support building a standalone copy of the frontend directory.
+node_modules/
+.expo/
+android/
+ios/
+dist/
+web-build/
+*.log
+*.jks
+*.keystore
+*credentials*.json
+.git/
+# Keep .env public mobile configuration; never copy backend secrets here.

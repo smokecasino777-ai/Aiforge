@@ -1,22 +1,15 @@
 import { Redirect } from 'expo-router';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from '@/src/context/AuthContext';
 import { colors } from '@/src/theme/colors';
-import { storage } from '@/src/utils/storage';
+import { useOnboarding } from '@/src/lib/onboarding';
 import AnimatedSplash from '@/src/components/AnimatedSplash';
 
 export default function Index() {
   const { user, loading } = useAuth();
-  const [onboarded, setOnboarded] = useState<boolean | null>(null);
+  const onboarded = useOnboarding();
   const [splashSeen, setSplashSeen] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      const v = await storage.getItem<string>('aiforge_onboarded', '');
-      setOnboarded(!!v);
-    })();
-  }, []);
 
   if (loading || onboarded === null) {
     return (

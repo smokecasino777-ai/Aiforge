@@ -1,128 +1,95 @@
-# AiForge — Product Requirements (v2)
+# AiForge — current product requirements and status
 
-## Overview
-AiForge is a cyberpunk-themed Android-ready Expo mobile app for AI-powered creation. Users generate images, videos, 3D-style renders, mesh/SCAD code, and chat with a real multi-turn AI assistant — all from a unified, animated UI inspired by the user's reference at `fierce-forge-ai-lab.base44.app`.
+## User request
+Build Phase1 of the approved sustainable pricing plan and prepare a compliant
+Google Play AAB. Verify purchases and fulfillment, upgrade video editing,
+CAD/STL import/export and avatar tools. Preserve the dark neon mobile identity.
+Only existing purchased provider funds are authorized; no new charges/top-ups.
+See PHASE1_IMPLEMENTATION.md for the approved catalog and implementation detail.
 
-## Tech Stack
-- **Frontend**: Expo Router (SDK 54) + React Native + react-native-reanimated + lucide-react-native + expo-linear-gradient + expo-blur + react-native-webview + expo-haptics + expo-video
-- **Backend**: FastAPI + Motor (MongoDB) + JWT (bcrypt) + emergentintegrations (LLM + Stripe)
-- **AI models** (all via `EMERGENT_LLM_KEY`)
-  - Image / 3D render / SCAD preview: **Gemini Nano Banana** (`gemini-3.1-flash-image-preview`)
-  - Video: **Sora 2** (async, returns base64 mp4)
-  - Chat / SCAD code: **Claude Sonnet 4.6** (now with persistent multi-turn history in MongoDB)
-- **Payments**: Stripe via emergentintegrations (test mode)
+## Architecture
+- Expo SDK54 / React Native0.81.5 / Expo Router. Native iOS/Android target;
+  web preview is a development view, not evidence of native billing success.
+- FastAPI, Motor/MongoDB via core.MongoProxy. Private APIs under /api.
+- Existing email/password JWT auth and owner password re-confirmation retained.
+- RevenueCat RN10.15.1 -> hybrid19.14.1 -> Android10.28.1 -> Play Billing8.3.0.
+  Android purchases use Play Billing, not Stripe/Razorpay. Legacy web checkout
+  remains separate; native callbacks/clients do not open it.
+- Private managed object storage for new media. Existing blob records remain
+  readable. Native files upload only through uploadForm; exports use Expo File.
 
-## Auth
-- Email + password only (JWT, bcrypt). Google OAuth has been **fully removed** from both frontend and backend as of 2026-10 security hardening.
-- Rate limits (slowapi): `/auth/login` 10/min, `/auth/register` 5/min, `/admin/unlock` 5/min.
-- JWT revocation on password change via `iat` vs `password_changed_at` field.
-- Password min length: 8 chars on new accounts.
+## Implemented
+1. Five monthly plans and eight one-time packs exactly as approved; free100 once
+   for30days only when funded. No new daily unlimited or automatic +20/day offers.
+2. Integer USD-micro credit ledger: promo/monthly/purchased lots, expiring-first
+   usage, fixed accepted quotes, one active operation/account, replay and ownership
+   guards, refunds, conservative cost liability accounting and stale recovery.
+3. Provider actions require quotes/funding. No silent model fallback. Bounded
+   context/output/image input and actual audio duration; no application retries.
+4. $25 monthly promotional/owner ceiling, separate paid liabilities, funding holds
+   before new purchases, evidence-based owner funding/rate controls protected by
+   existing short-lived admin unlock. No auto provider top-ups.
+5. Verified RevenueCat events grant new allowances separately from legacy terms;
+   duplicate transactions cannot re-credit, monthly periods come from receipts,
+   refunds revoke unused credits. Sandbox grants use promotional funding.
+6. Plans show accurate references vs live localized prices, readiness guards,
+   cautious regional margin floors, More packs confirmation, restore/pending
+   wording and balance/history screens. Unconfigured products cannot be bought.
+7. Real FFmpeg MP4 trim/rotation/flip/speed/mute export (<=60s, <=60MB).
+8. Real STL import/export, primitive creation, dimensions/watertight inspection,
+   scale/axis rotation, preserved originals, native SVG preview and undo history.
+   SCAD source editable/exportable; approximate preview is not a real compiler.
+9. Avatar background/framing controls, fresh quote per generation/retry, private
+   normalized profile-image storage. No paid avatar call made during this work.
+10. Build configuration uses clean Expo prebuild instead of stale native trees;
+    excess media/overlay permissions blocked, TypeScript blockers corrected,
+    Sentry invalid configuration fails safely off and source-map upload disabled.
 
-## Core Features
-1. **Generation** — `/api/generate` (image, video, model3d) + `/api/generate/scad` (code **and** PNG preview) + `/api/chat` (multi-turn)
-2. **Library** — list / filter / get / delete creations
-3. **Plans (6 tiers)** —
-   - **Free** $0 / 5 per day
-   - **Spark** $9.99 / 50 per day
-   - **Forge** $29.99 / 200 per day (POPULAR)
-   - **Neon Pro** $49.99 / 500 per day
-   - **Quantum** $99.99 / 2000 per day
-   - **Singularity** $199.99 / unlimited
-4. **Usage meters** — `daily_used / daily_limit` enforced server-side (402 over limit)
-5. **Stripe** — Checkout for all 5 paid tiers (now including quantum + singularity), webhook upgrades the user plan
-6. **Multi-turn AI Assistant** — `/api/chat` persists per-session messages in MongoDB and replays them as primer context every call so the LLM remembers prior turns
+## Validation
+- TypeScript, Python lint, frontend lint and Expo dependency checks passed.
+- Android JS export with bytecode disabled passed after Phase1 changes.
+- Earlier isolated Android prebuild passed; a final prebuild/export is pending
+  the last small navigation/admin-write fixes. Neither check is a signed AAB.
+- Report iteration_20: 15 backend tests passed, including real private STL
+  storage/transform/ownership, malformed files, local FFmpeg render and API guards.
+- Initial UI testing incomplete: onboarding/billing connection timing affected
+  navigation; fixes now separate auth from queued billing binding, synchronize
+  onboarding state, improve Skip target and expose active-screen testIDs.
+- Deeper isolated money-ledger and final focused UI regression still pending.
+- Testing browser needed process-only DBus environment workaround. Public app
+  endpoints healthy; do not change protected supervisor/Metro to suppress logs.
 
-## Screens
-- `(auth)/login` — email + password only (no Google)
-- `(auth)/register`
-- `(tabs)/index` — Home with welcome, usage meter, 3 category cards, recent creations
-- `(tabs)/create` — Type selector (Image / Video / 3D Render / Mesh-SCAD / AI Assist). AI Assist opens a real chat panel with bubbles, avatars, idea chips.
-- `(tabs)/library` — Filter chips + creation grid
-- `(tabs)/plans` — 6 plan cards with Upgrade buttons
-- `(tabs)/profile` — Avatar + plan badge + usage stats + Sign Out
-- `creation/[id]` — Detail view with media:
-  - Images: full-bleed render
-  - Videos: WebView player + draggable CapCut-style trim editor (0-60s)
-  - SCAD: tabbed Preview (PNG via Nano Banana) | Code (Claude-generated OpenSCAD)
-  - Chat: scrollable text
-- `payment/success` — Stripe callback
+## P0 / release blockers
+- New Play/RevenueCat multi-tier and consumable catalog is NOT provisioned or
+  verified live. Matching products/base plans/entitlement, credentials and real
+  license-tester fulfillment/restore/refund tests remain required.
+- Provider funds/rates NOT verified: live funding envelope0, no rates, sales off.
+  A user message 'Credits Recharged' does NOT state a provider USD balance.
+  Do not invent balances or enable costly actions. Cost controls fail closed.
+- Video generation has no verified supported/priced replacement. Sora retired;
+  no assumption that Veo is included. Local video editing works independently.
+- No signed AAB/cloud build performed. Build workflow access/signing and current
+  highest Play versionCode are unverified. Keep package unchanged:
+  app.emergent.fierceforgeios2c75fc60. Neither20 nor139 is treated as current.
+- Google developer-account/policy declarations and internal/closed-track gates
+  need actual Console evidence; no submission or appeal has occurred.
+- Repo history operations stopped on branch mismatch: active
+  codespace-special-spork-4qq7969947963v4j; remotes match smokecasino777-ai/Aiforge,
+  but not one of four specifically authorized purge branches. No Git writes,
+  force pushes, repo deletion or history-cleanup claim. Ignore rules do not purge
+  existing tracked reports. Exposed credentials need rotation and 2FA re-enabled.
 
-## Visual Design
-- Deep cyberpunk galaxy: `#020208` base + neon **cyan / green / purple / red** gradients
-- Animated starfield with shooting stars
-- **Ghostly background AiForge logo** (the actual anvil + circuit-brain PNG provided by the user) breathing in opacity (0.04 → 0.16) with a quick double heart-beat pulse on scale every ~3.5 s
-- **Pulsing top-bar logo** (gradient sparkle box) on every screen
-- Gradient pill buttons, glassmorphic cards, neon edges
-- **Haptic press-scale** on every interactive surface via `PressableScale`
+## P1
+- Complete/regress ledger crash/concurrency and UI flows. Fix all discovered bugs.
+- Confirm legal/data-safety/support-contact facts and native purchase behavior.
+- Credential-backed provider pricing/access/funding verification; configure only
+  supported store catalog through supported service workflow, then test on track.
 
-## Android / Play Store readiness
-- `app.json`: `package: com.aiforge.app`, dark theme, edge-to-edge, adaptive icon, scheme `aiforge`
-- Permissions: `INTERNET` only
+## P2 (not authorized for new external charges)
+Real cost/margin optimization, more verified video options, advanced voice/research,
+annual pricing only after evidence; scalable financial journal archival and richer
+CAD operations. Do not silently reduce existing purchased contractual benefits.
 
-## Test status (final)
-- Backend pytest: **28/28 PASS** (iteration 3) — auth, generation, multi-turn chat continuity, SCAD preview, all 6 plans, Stripe checkout for every paid tier, usage limits, etc.
-- Frontend visually verified end-to-end on mobile viewport: login → home → create (5 types incl. multi-turn AI Assist) → library → plans → profile → creation detail (images / videos / SCAD).
-- Known cosmetic warnings: RN-web deprecation messages (`shadow*` and `props.pointerEvents`) — non-functional, console-only.
-
-## Test credentials
-See `/app/memory/test_credentials.md`.
-
-
-## v2.1 Changelog (this iteration)
-- **Owner Secrets page** at `/admin/secrets` for in-app Stripe key rotation. Admin-gated (`ADMIN_EMAIL` or first user). Validates the key against `api.stripe.com/v1/balance` before saving, writes atomically to `backend/.env`, and hot-swaps the in-process key with zero restart.
-- **Backend admin endpoints**: `GET /api/admin/me`, `GET/POST/DELETE /api/admin/stripe-key`.
-- **shadow* → boxShadow** swept across the frontend; zero deprecation warnings from our source.
-- **Onboarding tutorial**: 6-slide pager gated by `aiforge_onboarded` AsyncStorage flag.
-- **Interactive 3D SCAD viewer**: in-WebView Three.js scene that parses common OpenSCAD primitives (cube, sphere, cylinder + translate/rotate/scale/color/union/difference/intersection) into a rotatable mesh with **EXPORT STL** button.
-
-## How to rotate the Stripe key (no chat exposure!)
-1. Open Stripe Dashboard → **Developers → API keys → Reveal live key / Roll key**.
-2. In AiForge: **Profile → Owner · App Secrets**.
-3. Paste the freshly rolled `sk_live_…` key, tap **Save & Activate**.
-4. Backend validates against Stripe, writes to `.env`, hot-swaps — done. No restart, no chat exposure.
-
-## Owner admin
-- Default admin = oldest user (auto-promoted on first hit) OR whoever's email matches `ADMIN_EMAIL` in `.env`. Current: `demo@example.com`.
-
-## Update (2026-06) — Admin/Customer separation + production lockdown
-- Owner/admin account: jraycwalker@gmail.com (idempotently seeded at backend startup via ADMIN_EMAIL + ADMIN_PASSWORD env; only admin in system).
-- demo@example.com demoted to plain customer; public "Use demo account" one-tap button removed from login.
-- Removed first-user auto-promote fallback (security hole in fresh production DBs).
-- NEW sudo mode: Admin Secrets page requires re-entering admin password (POST /api/admin/unlock → 15-min sudo JWT sent as X-Admin-Unlock). All sensitive admin endpoints 403 without it.
-- Customer password recovery: "Forgot password?" → email the owner (mailto), owner resets via unlocked admin panel.
-- Verified: testing iteration_8 (18/18 backend + full frontend flows) PASS; deployment_agent PASS.
-
-## Update (2026-06) — Production Atlas DB authorization fix (iteration 9)
-- Production logs showed `not authorized on fierce-forge` for all DB ops: the Atlas user is not authorized on the URI's default database.
-- core.py `db` is now a MongoProxy; startup runs select_authorized_db() FIRST — probes [URI default db, DB_NAME env, dbs from connectionStatus roles] with a cheap find and re-points db to the first authorized one. Never raises.
-- Proven by mock unit tests (tests/test_db_failover_iter9.py, 5/5) reproducing the exact production failure + 23/23 API regression. Requires re-Publish to take effect in production.
-
-## Update (2026-06) — Azure AI Foundry migration (iteration 10)
-- New backend/ai_providers.py: single provider layer for all AI calls.
-- TEXT (assistant chat, SCAD codegen, captions) → customer's Azure gpt-4o deployment (AZURE_API_KEY/AZURE_OPENAI_BASE/AZURE_DEPLOYMENT in backend/.env, verified working).
-- IMAGE/VIDEO → Azure gpt-image-1 / sora when AZURE_IMAGE_DEPLOYMENT / AZURE_VIDEO_DEPLOYMENT env are set (deployments do NOT exist yet on the customer's resource); until then falls back to Emergent key (Nano Banana / sora-2) so nothing breaks for launch.
-- Customer's old Azure key was invalid (401); replaced with working 84-char key.
-
-## Update (2026-06) — Google Sign-In re-added (iteration 11)
-- Emergent-managed Google Auth: 'Continue with Google' buttons on login + register (Text 'G' badge, no icon imports — previous Chrome-icon crash cause eliminated).
-- src/utils/googleAuth.ts (web full-page redirect / native openAuthSessionAsync with aiforge://login deep link), GoogleSessionCatcher in _layout.tsx, api.googleAuth → POST /api/auth/google (exchanges session_id, upserts user, returns app JWT; Google users get referral_code).
-- Email/password login coexists untouched. Tested: 11/11 backend + full frontend regression PASS (iteration_11); register.tsx missing-destructure bug found by testing agent and fixed.
-
-## Update (2026-10 — iter-19 Launch Night fixes)
-- **Backend hardening (3 bugs flagged by iter-18 testing agent — all green now)**:
-  - Voice `_reserve_quota`: added hard `amount > cap` guard BEFORE the atomic increment, so the first request of the day can no longer bypass the free cap via the `$exists:False` branch. Voice regression 3/3 pass.
-  - RevenueCat webhook: `payload.get("event") or {}` falsely coerced `[]` → `{}` and 200’d. Now distinguishes `None` (legacy flat body) vs non-dict (rejected 400). test_non_dict_body_400 pass.
-  - Pro 402 message: removed misleading "grab a token pack" wording — Pro/legacy daily-limit users don’t spend `tokens_balance`.
-  - Startup backfill: `_backfill_free_gens()` now actually runs on boot (was defined but never called). Logged "Backfilled 15 free user(s)" on first start.
-  - `tokens.py`: dropped unused `now_iso` variable.
-- **Frontend**:
-  - `_layout.tsx`: added regex guard on `EXPO_PUBLIC_SENTRY_DSN` (`^https://[^@]+@[^/]+/\\d+$`) so pasted documentation/CLI output no longer boots Sentry — now it just logs a warning and ships without crash reporting. App renders cleanly with an invalid DSN in `.env`.
-  - Home: new "Free tokens expire in Xd" chip (`FreeTokensBadge`) under the usage bar — pulls from `/tokens/balance`, swaps colour to pink at ≤5 days left, falls back to "Out of free gens — tap to grab a token pack" when both free_gens and tokens_balance are 0. Taps route to Plans.
-- **Launch artifact**: `/app/memory/LAUNCH_CHECKLIST.md` fully refreshed with Play Console / RevenueCat / Secrets / build / smoke-test sections.
-- Known non-blockers for tonight’s launch (documented in LAUNCH_CHECKLIST §6): Azure chat key 401 (502s on chat/SCAD, image+video unaffected), Emergent sora-2 404 (video jobs refund 3 tokens cleanly), invalid Sentry DSN (safe-guarded).
-
-## Update (2026-10 — release build configuration)
-- Added `frontend/eas.json` with an explicit `production` Android `app-bundle` profile, so release builds always create a Play Store compatible `.aab`. The missing EAS project profile was the most likely cause of the reported build-generation failure when no build log was available.
-- Corrected two Android bundle-time source issues: the creation detail's native video player now imports `expo-video`, and the editor uses Expo's supported legacy file API import for cache reads/writes.
-- Azure text errors (including the current 401) now fall back to the already-configured Emergent Claude provider, keeping caption, chat, and SCAD text flows available while the Azure credential is repaired.
-- Added `/api/health` alongside existing root health probes for ingress-compatible monitoring.
+## Private test access
+Use /app/memory/test_credentials.md. Never duplicate credentials in reports or
+public summaries. Tests must isolate financial fixtures from the app database.

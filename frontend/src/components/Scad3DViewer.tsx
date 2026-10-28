@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
 
 function buildHtml(scadCode: string, previewBase64?: string | null, hideToolbar?: boolean): string {
   // Escape backticks and backslashes for safe injection into the template string
-  const safeCode = scadCode.replace(/\\/g, '\\\\').replace(/`/g, '\\`');
+  const safeCode = JSON.stringify(scadCode).replace(/</g, '\\u003c');
   const fallback = previewBase64
     ? `data:image/png;base64,${previewBase64}`
     : '';
@@ -100,12 +100,13 @@ function buildHtml(scadCode: string, previewBase64?: string | null, hideToolbar?
     <button class="btn alt" id="stl">EXPORT STL</button>
   </div>`}
   <div id="status">Drag to rotate · Pinch / scroll to zoom</div>
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}</script>
   <script type="module">
     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
     import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
     import { STLExporter } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/exporters/STLExporter.js';
 
-    const SCAD = \`${safeCode}\`;
+    const SCAD = ${safeCode};
 
     const canvas = document.getElementById('c');
     const scene = new THREE.Scene();
@@ -467,6 +468,8 @@ function buildHtml(scadCode: string, previewBase64?: string | null, hideToolbar?
     }
 
     function exportSTL() {
+      status.textContent = 'Approximate preview only. Use STL Mesh Studio for geometry export, or export SCAD source.';
+      return;
       try {
         const ex = new STLExporter();
         const stl = ex.parse(model, { binary: false });

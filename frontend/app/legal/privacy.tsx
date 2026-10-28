@@ -17,7 +17,7 @@ const SECTIONS: { title: string; body: string }[] = [
   {
     title: '2. What we collect',
     body:
-      '• Account: email address and a hashed password (we never see your raw password).\n• Content: text prompts you submit and the resulting media (images, video, 3D renders, OpenSCAD code, chat replies). These are stored under your account so you can retrieve them in your Library.\n• Usage: daily generation counts, free-tier balance, token-pack balance, and plan/tier.\n• Payment: all purchases (subscriptions and one-time token packs) are processed by Google Play Billing or Apple In-App Purchase and verified for us by RevenueCat. We never see your card number. We store only your anonymous RevenueCat app-user-id, the product id, the plan or token quantity, and the paid timestamp.\n• Device: standard server logs (IP, user-agent) for security and abuse prevention. If crash reporting is enabled we also send anonymised crash traces to Sentry.\n• Referrals: your unique referral code and the user-id of whoever referred you, if applicable.',
+      '• Account: email address and a hashed password; raw passwords are not stored.\n• Content: prompts, uploaded media, voice recordings submitted for transcription, and generated images, video, 3D content and chat replies. Saved creations are linked to your account.\n• Usage: generation counts, free-generation balance, token balance and plan.\n• Payment: Android in-app purchases use Google Play Billing and iOS purchases use Apple In-App Purchase, with RevenueCat verification. We do not receive your card number. We store an account-linked pseudonymous RevenueCat user ID, product and transaction identifiers, purchase amount/currency where supplied, token quantity, store, environment and purchase/refund timestamps. Legacy web purchase records, if any, are separate.\n• Device: server logs may include IP address and user agent. Optional crash reporting may include technical diagnostic data; it is not guaranteed anonymous.\n• Referrals: your referral code and the referring account identifier.',
   },
   {
     title: '3. How we use it',
@@ -75,14 +75,14 @@ export default function Privacy() {
             <Shield size={20} color={colors.cyan} />
             <Text style={styles.title}>Privacy Policy</Text>
           </View>
-          <Text style={styles.updated}>Last updated: June 2026</Text>
+          <Text style={styles.updated} testID="privacy-updated">Last updated: October 2026</Text>
           <Text style={styles.intro}>
             This policy explains what data AiForge collects when you use the app, why we collect it, and what your rights are. We wrote it in plain English on purpose.
           </Text>
           {SECTIONS.map((s) => (
             <View key={s.title} style={styles.section}>
               <Text style={styles.sectionTitle}>{s.title}</Text>
-              <Text style={styles.sectionBody}>{s.body}</Text>
+              <Text style={styles.sectionBody} testID={`privacy-section-${s.title.split('.')[0]}`}>{s.body}</Text>
             </View>
           ))}
           <View style={{ height: 60 }} />

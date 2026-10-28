@@ -27,7 +27,7 @@ from core import (
     now_utc,
     select_authorized_db,
 )
-from routes import admin, assets, auth, avatar, checkout, editor, generation, legal, referrals, subscription, tokens, voice
+from routes import admin, assets, auth, avatar, checkout, credits, creative_files, editor, generation, legal, referrals, subscription, tokens, voice
 
 # AiForge API - Triggering deployment
 # In production, hide the admin API surface from drive-by probes.
@@ -89,6 +89,8 @@ api.include_router(generation.router)
 api.include_router(checkout.router)
 api.include_router(subscription.router)
 api.include_router(tokens.router)
+api.include_router(credits.router)
+api.include_router(creative_files.router)
 api.include_router(voice.router)
 api.include_router(editor.router)
 api.include_router(avatar.router)
@@ -211,6 +213,12 @@ async def on_startup():
     await _safe_create_index(db.users, "user_id", unique=True)
     await _safe_create_index(db.creations, [("user_id", 1), ("created_at", -1)])
     await _safe_create_index(db.creations, "creation_id", unique=True)
+    await _safe_create_index(db.credit_quotes, "quote_id", unique=True)
+    await _safe_create_index(db.credit_products, "catalog_id", unique=True)
+    await _safe_create_index(db.credit_products, "product_id", unique=True)
+    await _safe_create_index(db.credit_rates, [("action", 1), ("quality", 1)], unique=True)
+    await _safe_create_index(db.credit_purchase_intents, "intent_id", unique=True)
+    await _safe_create_index(db.cad_meshes, "mesh_id", unique=True)
     await _safe_create_index(db.usage, [("user_id", 1), ("day", 1)], unique=True)
     await _safe_create_index(db.payments, "session_id", unique=True)
     # token_ledger: idempotency on transaction_id so RevenueCat retries never

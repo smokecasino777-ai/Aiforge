@@ -186,7 +186,7 @@ export default function CreationDetail() {
               <View style={styles.processing}>
                 <ActivityIndicator color={colors.cyan} size="large" />
                 <Text style={styles.processingText}>
-                  {isVideo ? 'Forging your video… Sora can take a few minutes.' : 'Generating…'}
+                  {isVideo ? 'Video processing status — refresh to check progress.' : 'Generating…'}
                 </Text>
               </View>
             ) : creation.status === 'failed' ? (

@@ -6,7 +6,6 @@ import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from core import (
-    FREE_SIGNUP_GENS,
     FREE_SIGNUP_WINDOW_DAYS,
     db,
     ensure_admin,  # noqa: F401  (kept for parity)
@@ -58,7 +57,8 @@ async def register(request: Request, req: RegisterRequest):
         # Free signup gift: FREE_SIGNUP_GENS generations, valid for
         # FREE_SIGNUP_WINDOW_DAYS from now. Shown on the home screen as a
         # countdown so users feel the urgency to upgrade or buy tokens.
-        "free_gens_remaining": FREE_SIGNUP_GENS,
+        "free_gens_remaining": 0,
+        "credit_catalog_version": "credits_v1",
         "free_gens_expires_at": iso(
             now_utc() + timedelta(days=FREE_SIGNUP_WINDOW_DAYS)
         ),
@@ -74,13 +74,8 @@ async def register(request: Request, req: RegisterRequest):
         )
         if referrer and referrer["user_id"] != user_id:
             doc["referred_by"] = referrer["user_id"]
-            expires = iso(now_utc() + timedelta(days=7))
-            doc["bonus_amount"] = 20
-            doc["bonus_until"] = expires
-            await db.users.update_one(
-                {"user_id": referrer["user_id"]},
-                {"$set": {"bonus_amount": 20, "bonus_until": expires}},
-            )
+            # New referrals no longer promise uncapped daily grants. Existing
+            # historical bonus records and purchased terms are left untouched.
 
     await db.users.insert_one(doc)
     token = make_token(user_id)

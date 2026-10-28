@@ -82,8 +82,10 @@ export default function AdminSecrets() {
 
   const loadSecrets = async () => {
     try {
-      const s = await api.adminGetStripeKey();
-      setStatus(s);
+      if (Platform.OS === 'web') {
+        const s = await api.adminGetStripeKey();
+        setStatus(s);
+      }
       const u = await api.adminListUsers();
       setUsers(u.users || []);
     } catch {
@@ -317,9 +319,10 @@ export default function AdminSecrets() {
             </View>
           </View>
 
-          <Text style={styles.title}>App Secrets</Text>
-          <Text style={styles.subtitle}>Manage your Stripe API key securely — never paste it in chat.</Text>
+          <Text style={styles.title} testID="admin-settings-title">Owner settings</Text>
+          <Text style={styles.subtitle} testID="admin-billing-explanation">Native in-app purchases use Google Play Billing or Apple In-App Purchase.</Text>
 
+          {Platform.OS === 'web' && <>
           {/* Status card */}
           <View style={[styles.card, { borderColor: modeColor + '66' }]}>
             <View style={styles.row}>
@@ -415,6 +418,7 @@ export default function AdminSecrets() {
             testID="reset-stripe-key"
             small
           />
+          </>}
 
           {/* ------ Reset User Password (admin-only recovery flow) ------ */}
           <View style={{ height: 22 }} />

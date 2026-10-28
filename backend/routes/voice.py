@@ -13,6 +13,10 @@ import io
 import os
 import re
 import tempfile
+import asyncio
+import subprocess
+import wave
+import imageio_ffmpeg
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -24,6 +28,7 @@ except Exception:  # pragma: no cover
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
+from metering import MeteredRoute, current_quote, provider_start
 
 from core import (
     EMERGENT_LLM_KEY,
@@ -35,7 +40,7 @@ from core import (
     now_utc,
 )
 
-router = APIRouter(tags=["voice"])
+router = APIRouter(tags=["voice"], route_class=MeteredRoute)
 
 # ---- Daily caps ----
 # Chars for TTS, seconds for STT. Values are generous for Pro, zero-but-trial
@@ -103,6 +108,8 @@ async def _reserve_quota(
     Uses a single `find_one_and_update` with a `$lte` guard so concurrent
     requests can't bypass the cap by reading the counter in parallel.
     """
+    if current_quote.get() and not current_quote.get().get("legacy"):
+        return
     user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "plan": 1})
     plan = (user or {}).get("plan", "free").lower()
     # Pro RC tier + legacy Stripe paying tiers both get the Pro cap.
@@ -197,6 +204,7 @@ async def voice_tts(
         )
 
     try:
+        await provider_start()
         audio_bytes = await _get_tts().generate_speech(
             text=text,
             model=TTS_MODEL,
@@ -256,19 +264,35 @@ async def voice_stt(
     if len(raw) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="Clip too large (>5 MB)")
 
-    # Estimate seconds — m4a HQ ≈ 24 KB/s. Keep conservative upper estimate so
-    # the quota accounts for larger-than-expected files.
-    est_seconds = max(1, int(len(raw) / (24 * 1024)))
+    # Decode and measure actual audio. Compressed file size is NOT a safe
+    # duration or cost bound. No provider is contacted for an overlong clip.
+    def normalize():
+        with tempfile.TemporaryDirectory(prefix="aiforge-voice-") as directory:
+            source, target = os.path.join(directory, "source"), os.path.join(directory, "speech.wav")
+            with open(source, "wb") as handle:
+                handle.write(raw)
+            args = [imageio_ffmpeg.get_ffmpeg_exe(), "-nostdin", "-loglevel", "error", "-protocol_whitelist", "file,pipe", "-i", source, "-t", "61", "-vn", "-ac", "1", "-ar", "16000", "-threads", "1", "-y", target]
+            result = subprocess.run(args, capture_output=True, timeout=30)
+            if result.returncode:
+                raise HTTPException(400, "Audio format could not be read")
+            with wave.open(target, "rb") as handle:
+                seconds = handle.getnframes() / handle.getframerate()
+            if not 0 < seconds <= 60:
+                raise HTTPException(400, "Record at most 60 seconds for this quote")
+            with open(target, "rb") as handle:
+                return handle.read(), max(1, int(seconds + 0.999))
+    raw, est_seconds = await asyncio.to_thread(normalize)
     await _reserve_quota(
         user["user_id"], "stt_seconds", est_seconds, FREE_STT_SECONDS_DAILY, PRO_STT_SECONDS_DAILY
     )
 
     # emergentintegrations wants an open file handle — write to tmp and open.
-    suffix = os.path.splitext(audio.filename or "")[1] or ".m4a"
+    suffix = ".wav"
     if suffix.lower() not in {".m4a", ".mp3", ".mp4", ".mpga", ".mpeg", ".wav", ".webm"}:
         suffix = ".m4a"
 
     try:
+        await provider_start()
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             tmp.write(raw)
             tmp_path = tmp.name

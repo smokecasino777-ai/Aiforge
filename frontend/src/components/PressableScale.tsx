@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, ViewStyle, PressableProps } from 'react-native';
+import { Pressable, ViewStyle, PressableProps, StyleProp } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, {
   useSharedValue,
@@ -9,8 +9,8 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 
-type Props = PressableProps & {
-  style?: ViewStyle | ViewStyle[];
+type Props = Omit<PressableProps, 'style'> & {
+  style?: StyleProp<ViewStyle>;
   haptic?: boolean;
   scale?: number;
   children: React.ReactNode;

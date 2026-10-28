@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { Mic, Lock } from 'lucide-react-native';
+import { Mic } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
 import PressableScale from '@/src/components/PressableScale';
@@ -18,7 +18,6 @@ import { useHoldToTalk } from '@/src/lib/voice';
  * While `isListening` or `isUploading`, the button pulses to indicate state.
  */
 export default function MicButton({
-  isPro,
   onTranscript,
   onError,
 }: {
@@ -30,15 +29,11 @@ export default function MicButton({
   const { isListening, isUploading, start, stop } = useHoldToTalk();
 
   const guardedStart = useCallback(async () => {
-    if (!isPro) {
-      router.push('/(tabs)/plans');
-      return;
-    }
     const ok = await start();
     if (!ok) {
       onError?.('Microphone unavailable. Grant mic permission in Settings and try again.');
     }
-  }, [isPro, start, router, onError]);
+  }, [start, onError]);
 
   const guardedStop = useCallback(async () => {
     try {
@@ -54,19 +49,10 @@ export default function MicButton({
     }
   }, [stop, onTranscript, onError, router]);
 
-  if (!isPro) {
-    return (
-      <PressableScale onPress={() => router.push('/(tabs)/plans')}>
-        <View style={[styles.btn, styles.locked]}>
-          <Lock size={14} color={colors.textDim} />
-          <Mic size={14} color={colors.textDim} style={styles.lockedMic} />
-        </View>
-      </PressableScale>
-    );
-  }
-
   return (
     <PressableScale
+      testID="chat-record-voice"
+      disabled={isUploading}
       onPressIn={guardedStart}
       onPressOut={guardedStop}
     >
@@ -93,8 +79,8 @@ export default function MicButton({
 
 const styles = StyleSheet.create({
   btn: {
-    width: 42,
-    height: 42,
+    width: 48,
+    height: 48,
     borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',

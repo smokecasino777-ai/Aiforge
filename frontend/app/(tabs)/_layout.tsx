@@ -19,8 +19,11 @@ import { BlurView } from 'expo-blur';
 import { Home, Sparkles, LayoutGrid, Crown, User } from 'lucide-react-native';
 import { colors, radius } from '@/src/theme/colors';
 import { LinearGradient } from 'expo-linear-gradient';
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import * as Haptics from 'expo-haptics';
+
+// Derive the type from the navigator we actually render, not a second copy
+// of React Navigation installed beside Expo Router.
+type BottomTabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tabBar']>>[0];
 
 /**
  * Custom tab bar with:

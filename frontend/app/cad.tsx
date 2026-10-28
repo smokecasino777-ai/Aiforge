@@ -16,7 +16,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
 import {
   ArrowLeft,
   Box,
@@ -37,6 +36,7 @@ import Scad3DViewer, { Scad3DViewerHandle } from '@/src/components/Scad3DViewer'
 import FeatureTour from '@/src/components/FeatureTour';
 import { colors, radius } from '@/src/theme/colors';
 import { api, Creation } from '@/src/api/client';
+import { shareFile } from '@/src/utils/shareFile';
 
 const PROMPT_IDEAS = [
   'A futuristic hexagonal vase',
@@ -78,6 +78,8 @@ export default function CADGenerator() {
   const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
   const [showCode, setShowCode] = useState(false);
+  const [codeDraft, setCodeDraft] = useState('');
+  const [cadMessage, setCadMessage] = useState('');
 
   const current = pointer >= 0 ? history[pointer] : null;
 
@@ -87,8 +89,8 @@ export default function CADGenerator() {
       (async () => {
         try {
           const c = await api.getCreation(source as string);
-          if (c.type !== 'model3d') {
-            Alert.alert('CAD', 'That creation is not a 3D model.');
+          if (c.type !== 'model3d' || c.media_mime !== 'application/x-openscad') {
+            setCadMessage('This creation is not editable OpenSCAD source. A 3D-style image is not a mesh; import a real STL in Mesh Studio.');
             return;
           }
           const code = c.media_data ? atob(c.media_data) : '';
@@ -161,7 +163,7 @@ export default function CADGenerator() {
               <View style={styles.iconBtn}><ArrowLeft size={18} color={colors.text} /></View>
             </PressableScale>
             <PulsingLogo size={28} textSize={16} />
-            <PressableScale onPress={() => setShowCode(true)} disabled={!current} testID="cad-show-code">
+            <PressableScale onPress={() => { setCodeDraft(current?.code || ''); setShowCode(true); }} disabled={!current} testID="cad-show-code">
               <View style={[styles.iconBtn, !!current && styles.iconBtnActive]}>
                 <Code2 size={18} color={current ? colors.green : colors.textDim} />
               </View>
@@ -175,8 +177,10 @@ export default function CADGenerator() {
               <Text style={styles.title}>3D / CAD GENERATOR</Text>
             </View>
             <Text style={styles.subtitle}>
-              Sketch any object with words. AiForge renders + exports STL ready for printing.
+              Edit OpenSCAD source, or open Mesh Studio for real STL import, transforms and export. Source previews are approximate.
             </Text>
+            <PressableScale testID="cad-open-mesh-studio" onPress={() => router.push('/mesh')} style={{ minHeight: 48, justifyContent: 'center' }}><Text style={{ color: colors.cyan, fontWeight: '800' }}>Open STL Mesh Studio</Text></PressableScale>
+            {!!cadMessage && <Text testID="cad-message" style={styles.subtitle}>{cadMessage}</Text>}
           </View>
 
           {/* Toolbar */}
@@ -211,10 +215,10 @@ export default function CADGenerator() {
             />
             <ToolPill
               icon={<Download size={14} color={current ? colors.green : colors.textDim} />}
-              label="STL"
-              onPress={() => viewerRef.current?.exportSTL()}
+              label="SCAD"
+              onPress={() => current && shareFile(current.code, 'aiforge-model.scad', 'application/x-openscad').catch((e) => setCadMessage(e.message))}
               disabled={!current}
-              testID="cad-stl"
+              testID="cad-export-source"
               tint={colors.green}
             />
             <ToolPill
@@ -259,7 +263,7 @@ export default function CADGenerator() {
               style={{ flexGrow: 0 }}
             >
               {PROMPT_IDEAS.map((p) => (
-                <PressableScale key={p} onPress={() => setPrompt(p)}>
+                <PressableScale key={p} testID={`cad-idea-${PROMPT_IDEAS.indexOf(p)}`} onPress={() => setPrompt(p)}>
                   <View style={styles.ideaPill}>
                     <Sparkles size={11} color={colors.cyan} />
                     <Text style={styles.ideaText}>{p}</Text>
@@ -286,7 +290,7 @@ export default function CADGenerator() {
                 editable={!busy}
               />
             </View>
-            <PressableScale onPress={onGenerate} testID="cad-generate">
+            <PressableScale onPress={onGenerate} disabled={busy} testID="cad-generate">
               <LinearGradient
                 colors={busy ? ['#444', '#222'] : [colors.cyan, '#0066AA']}
                 style={styles.sendBtn}
@@ -307,17 +311,18 @@ export default function CADGenerator() {
       </SafeAreaView>
 
       {/* SCAD code modal */}
-      <Modal visible={showCode} transparent animationType="slide" onRequestClose={() => setShowCode(false)}>
-        <Pressable style={styles.modalScrim} onPress={() => setShowCode(false)}>
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+      <Modal testID="cad-source-modal" visible={showCode} transparent animationType="slide" onRequestClose={() => setShowCode(false)}>
+        <Pressable testID="cad-source-dismiss" style={styles.modalScrim} onPress={() => setShowCode(false)}>
+          <Pressable testID="cad-source-card" style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
             <View style={styles.modalHeader}>
               <Code2 size={16} color={colors.green} />
               <Text style={styles.modalTitle}>OpenSCAD source</Text>
               <Text style={styles.modalMeta}>{current?.prompt}</Text>
             </View>
             <ScrollView style={{ maxHeight: 460 }}>
-              <Text style={styles.codeBlock}>{current?.code || ''}</Text>
+              <TextInput testID="cad-source-input" multiline value={codeDraft} onChangeText={setCodeDraft} style={[styles.codeBlock, { minHeight: 200 }]} maxLength={30000} />
             </ScrollView>
+            <PressableScale testID="cad-apply-source" style={{ minHeight: 48, justifyContent: 'center' }} onPress={() => { if (codeDraft.trim()) pushHistory({ code: codeDraft, preview: null, prompt: current?.prompt || 'Edited source' }); setShowCode(false); }}><Text style={{ color: colors.cyan, fontWeight: '800' }}>Apply source edit · no AI credits</Text></PressableScale>
           </Pressable>
         </Pressable>
       </Modal>
@@ -329,7 +334,7 @@ export default function CADGenerator() {
           {
             emoji: '🧊',
             title: 'CAD Generator',
-            body: 'Describe any object — gears, vases, robots — and AiForge forges a 3D model + OpenSCAD source ready to print.',
+            body: 'Generate and edit OpenSCAD source. The in-app source preview approximates supported primitives; render the exported source in OpenSCAD for full geometry.',
             color: colors.cyan,
           },
           {
@@ -340,8 +345,8 @@ export default function CADGenerator() {
           },
           {
             emoji: '⬇️',
-            title: 'Export STL',
-            body: 'Tap STL to download a real mesh file. Drop it into any slicer (Cura, PrusaSlicer) and 3D-print.',
+            title: 'STL Mesh Studio',
+            body: 'Import a real STL, inspect its dimensions, scale or rotate it, and export a copy. Always check printability in your slicer.',
             color: colors.pink,
           },
         ]}

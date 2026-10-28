@@ -4,9 +4,10 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Dimensions,
+  useWindowDimensions,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  Pressable,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,10 +18,7 @@ import GhostLogoBackground from '@/src/components/GhostLogoBackground';
 import GradientButton from '@/src/components/GradientButton';
 import PulsingLogo from '@/src/components/Logo';
 import { colors, radius } from '@/src/theme/colors';
-import { storage } from '@/src/utils/storage';
-
-const { width: W } = Dimensions.get('window');
-const ONBOARDED_KEY = 'aiforge_onboarded';
+import { completeOnboarding } from '@/src/lib/onboarding';
 
 const SLIDES = [
   {
@@ -28,53 +26,57 @@ const SLIDES = [
     color: colors.cyan,
     eyebrow: 'WELCOME',
     title: 'Forge anything you can dream',
-    body: 'AiForge turns words into images, videos, 3D models and STL-ready meshes — all from one cyberpunk-grade studio.',
+    body: 'A creative studio for quoted AI images, local video editing and real STL tools. Model availability and funding are checked before creating.',
   },
   {
     Icon: ImageIcon,
     color: colors.green,
     eyebrow: 'IMAGES',
-    title: 'Nano Banana · ultra-fast images',
-    body: 'Generate cinematic stills powered by Gemini 3.1 Flash Image. Cyberpunk samurai, holographic dragons — your call.',
+    title: 'Images with upfront costs',
+    body: 'Review a credit quote before creating an image. Only priced, funded AI models are available; your creative work stays in your private Library.',
   },
   {
     Icon: Video,
     color: colors.purple,
     eyebrow: 'VIDEOS',
-    title: 'Sora 2 video, with a built-in trim editor',
-    body: 'Spin up 4–12s clips, then CapCut-style trim the result. Auto-loops up to 60 seconds.',
+    title: 'Edit clips. Export real video.',
+    body: 'Import a clip, trim, rotate, change speed or mute, and save an actual MP4. AI video generation is paused until a supported replacement is verified.',
   },
   {
     Icon: Box,
     color: colors.yellow,
     eyebrow: '3D + SCAD',
-    title: 'From prompt to STL mesh',
-    body: 'Describe an object → get an isometric preview AND OpenSCAD code you can pop straight into a 3D printer pipeline.',
+    title: 'Real STL tools. Editable source.',
+    body: 'Import an STL, inspect dimensions, scale and rotate geometry, then export a copy. OpenSCAD source editing is separate; inspect printability in your slicer.',
   },
   {
     Icon: MessageSquare,
     color: colors.red,
     eyebrow: 'AI ASSIST',
     title: 'Your creative co-pilot',
-    body: 'Multi-turn chat with Claude Sonnet to sharpen prompts, brainstorm shots, and unlock ideas you didn’t know you had.',
+    body: 'Sharpen prompts and brainstorm with bounded AI chat. Choose Economy or a verified higher-quality model and approve the quote first.',
   },
   {
     Icon: Crown,
     color: colors.pink,
-    eyebrow: 'INVITE · EARN',
-    title: 'Refer friends, get +20/day',
-    body: 'Share your code. When friends sign up with it, you BOTH score +20 generations per day for a week.',
+    eyebrow: 'CLEAR COSTS',
+    title: 'Create with clear costs',
+    body: 'Review credits before each AI action. Monthly allowances and one-time packs keep spending predictable. Introductory credits depend on funded availability.',
   },
 ];
 
 export default function Onboarding() {
+  const { width: W } = useWindowDimensions();
   const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
   const [page, setPage] = useState(0);
+  const [finishing, setFinishing] = useState(false);
 
   const finish = async () => {
-    await storage.setItem(ONBOARDED_KEY, '1');
-    router.replace('/(auth)/login');
+    if (finishing) return;
+    setFinishing(true);
+    try { await completeOnboarding(); router.replace('/(auth)/login'); }
+    finally { setFinishing(false); }
   };
 
   const next = () => {
@@ -93,13 +95,13 @@ export default function Onboarding() {
   };
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} testID="onboarding-screen">
       <StarryBackground />
       <GhostLogoBackground />
       <SafeAreaView style={{ flex: 1 }}>
         <View style={styles.topBar}>
           <PulsingLogo size={32} textSize={18} />
-          <Text style={styles.skip} onPress={finish} testID="skip-onboarding">Skip</Text>
+          <Pressable onPress={finish} testID="skip-onboarding" disabled={finishing} accessibilityRole="button"><Text style={styles.skip}>Skip</Text></Pressable>
         </View>
 
         <ScrollView
@@ -120,9 +122,9 @@ export default function Onboarding() {
                 />
                 <s.Icon size={64} color={s.color} strokeWidth={1.4} />
               </View>
-              <Text style={[styles.eyebrow, { color: s.color }]}>{s.eyebrow}</Text>
-              <Text style={styles.title}>{s.title}</Text>
-              <Text style={styles.body}>{s.body}</Text>
+              <Text testID={`onboarding-eyebrow-${idx}`} style={[styles.eyebrow, { color: s.color }]}>{s.eyebrow}</Text>
+              <Text testID={`onboarding-title-${idx}`} style={styles.title}>{s.title}</Text>
+              <Text testID={`onboarding-body-${idx}`} style={styles.body}>{s.body}</Text>
             </View>
           ))}
         </ScrollView>
@@ -145,6 +147,8 @@ export default function Onboarding() {
           <GradientButton
             title={page === SLIDES.length - 1 ? 'Enter AiForge' : 'Next'}
             onPress={next}
+            disabled={finishing}
+            loading={finishing}
             icon={<ArrowRight size={16} color="#000" />}
             testID="onboarding-next"
           />
@@ -163,7 +167,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
   },
-  skip: { color: colors.textDim, fontSize: 14, fontWeight: '700', padding: 8 },
+  skip: { color: colors.textDim, fontSize: 14, fontWeight: '700', padding: 12, minHeight: 44 },
   slide: {
     paddingHorizontal: 32,
     alignItems: 'center',

@@ -9,7 +9,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -78,6 +78,7 @@ const PROMPT_IDEAS: Record<GenType, string[]> = {
 type ChatMsg = { role: 'user' | 'assistant'; text: string };
 
 export default function CreateScreen() {
+  const pathname = usePathname();
   const router = useRouter();
   const { user, refresh } = useAuth();
   const { isSubscribed } = useSubscription();
@@ -156,7 +157,7 @@ export default function CreateScreen() {
   };
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} testID={pathname.endsWith('/create') ? 'create-screen-active' : 'create-screen-inactive'}>
       <StarryBackground />
       <GhostLogoBackground />
       <SafeAreaView style={{ flex: 1 }} edges={['top']}>
@@ -287,19 +288,21 @@ export default function CreateScreen() {
                       ))}
                     </View>
                     <Text style={styles.helper}>
-                      Sora 2 supports 4 / 8 / 12s. Use the in-library editor to trim & loop up to 60s.
+                      AI video generation is paused until a supported, priced replacement is verified. Import your own video in Editor for real trim and MP4 export.
                     </Text>
                   </>
                 ) : null}
 
                 <GradientButton
-                  title={loading ? 'Forging…' : 'Forge It'}
+                  title={type === 'video' ? 'AI video currently unavailable' : loading ? 'Forging…' : 'Review credit quote'}
+                  disabled={loading || type === 'video'}
                   onPress={onGenerate}
                   loading={loading}
                   icon={<Sparkles size={16} color="#000" />}
                   testID="generate-btn"
                   style={{ marginTop: 18 }}
                 />
+                {type === 'video' && <PressableScale testID="open-local-video-editor" onPress={() => router.push('/editor')} style={{ minHeight: 48, justifyContent: 'center' }}><Text style={{ color: colors.cyan, textAlign: 'center' }}>Open video editor · no AI credits</Text></PressableScale>}
               </>
             )}
 

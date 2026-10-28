@@ -15,6 +15,7 @@
  */
 import { Platform } from 'react-native';
 import { fetch as expoFetch } from 'expo/fetch';
+import { requestCreditQuote } from '@/src/lib/creditQuote';
 
 export type UploadFilePart = {
   uri: string;
@@ -43,6 +44,9 @@ export async function uploadForm<T = unknown>(
   url: string,
   { files = {}, fields = {}, headers = {}, timeoutMs = 60_000 }: UploadOptions,
 ): Promise<T> {
+  if (url.endsWith('/voice/stt')) {
+    headers = { ...headers, 'X-Credit-Quote': await requestCreditQuote({ apiBase: url.slice(0, -'/voice/stt'.length), path: '/voice/stt', payload: { seconds: 60 }, headers }) };
+  }
   const form = new FormData();
 
   for (const [field, part] of Object.entries(files)) {

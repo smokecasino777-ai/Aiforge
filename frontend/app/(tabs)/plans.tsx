@@ -1,1104 +1,150 @@
-import { useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  ActivityIndicator,
-  Modal,
-  Platform,
-} from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, Text, ScrollView, Pressable, StyleSheet, ActivityIndicator, Modal, Platform, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import {
-  Check,
-  Crown,
-  Sparkles,
-  RefreshCw,
-  ShieldCheck,
-  Zap,
-  Image as ImageIcon,
-  Video,
-  Box,
-  Palette,
-  Star,
-  Lock,
-  Flame,
-  Coins,
-  Timer,
-  Gift,
-  TrendingUp,
-} from 'lucide-react-native';
-import type { PurchasesPackage, PurchasesOffering } from 'react-native-purchases';
-
-import StarryBackground from '@/src/components/StarryBackground';
-import GhostLogoBackground from '@/src/components/GhostLogoBackground';
-import GradientButton from '@/src/components/GradientButton';
-import PressableScale from '@/src/components/PressableScale';
+import { useFocusEffect, useRouter } from 'expo-router';
+import type { PurchasesPackage } from 'react-native-purchases';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, radius } from '@/src/theme/colors';
+import { api } from '@/src/api/client';
+import { useSubscription } from '@/src/lib/revenuecat';
 import { useAuth } from '@/src/context/AuthContext';
-import { useSubscription, rcEnabled } from '@/src/lib/revenuecat';
 
-// --- Conversion boosters (static copy) ---------------------------------------
-const PRO_FEATURES: { icon: React.ComponentType<{ size?: number; color?: string }>; label: string }[] = [
-  { icon: Zap, label: '500 AI generations every day' },
-  { icon: ImageIcon, label: 'Unlimited AI image creation' },
-  { icon: Video, label: 'Video generation with Sora-grade models' },
-  { icon: Box, label: '3D model + SCAD mesh generation' },
-  { icon: Palette, label: 'AI photo editor + style transfer' },
-  { icon: Sparkles, label: 'Priority access to new AI models' },
-  { icon: ShieldCheck, label: 'No ads, no watermarks, no limits' },
-];
-const SOCIAL_PROOF = 'Join 12,000+ creators building with AiForge';
-
-// Token pack metadata (purely cosmetic — real prices come from RevenueCat).
-// product_id must match the Google Play / RevenueCat Consumable product.
-// `cost_hint` is just UI copy showing how far the pack goes.
-type TokenPackMeta = {
-  productId: 'tokens_25' | 'tokens_100' | 'tokens_500';
-  title: string;
-  tokens: number;
-  gradient: [string, string];
-  badge?: string;
-  perk: string;
-};
-const TOKEN_PACK_META: TokenPackMeta[] = [
-  {
-    productId: 'tokens_25',
-    title: 'Starter',
-    tokens: 25,
-    gradient: [colors.green, '#00B248'],
-    perk: '25 images or 8 videos',
-  },
-  {
-    productId: 'tokens_100',
-    title: 'Creator',
-    tokens: 100,
-    gradient: [colors.cyan, colors.purple],
-    badge: 'POPULAR',
-    perk: '100 images or 33 videos',
-  },
-  {
-    productId: 'tokens_500',
-    title: 'Studio',
-    tokens: 500,
-    gradient: [colors.pink, colors.purple],
-    badge: 'BEST VALUE',
-    perk: '500 images or 166 videos',
-  },
-];
-
-type TabMode = 'pro' | 'tokens';
-type SelectedPlan = 'annual' | 'monthly' | 'weekly';
-
-// ---------------------------------------------------------------------------
+type Product = { id: string; name: string; kind: string; price_usd: number; credits: number; suggested?: boolean; available: boolean; package_id?: string; offering_id?: string; product_id?: string; reason?: string; minimum_local_prices?: Record<string, number> };
+type Wallet = { total: number; monthly: number; purchased: number; promo: number; lots: { id: string; kind: string; remaining: number; expires_at: string | null }[]; legacy_tokens: number; legacy_plan: string; credit_plan?: string; starter_pending?: boolean };
 
 export default function Plans() {
-  const { user, refresh, purchaseIdentityError } = useAuth();
-  const {
-    offerings,
-    isSubscribed,
-    identityReady,
-    isLoading,
-    purchase,
-    restore,
-    isPurchasing,
-    isRestoring,
-  } = useSubscription();
-
-  const [tab, setTab] = useState<TabMode>('pro');
-  const [selected, setSelected] = useState<SelectedPlan>('annual');
-  const [selectedPack, setSelectedPack] = useState<TokenPackMeta['productId']>('tokens_100');
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [infoBanner, setInfoBanner] = useState<string | null>(null);
-  const [tick, setTick] = useState(0);
   const router = useRouter();
-
-  // 1-second ticker to animate the free-tier countdown.
-  useEffect(() => {
-    const t = setInterval(() => setTick((x) => x + 1), 60000);
-    return () => clearInterval(t);
+  const { refresh } = useAuth();
+  const { offerings, purchase, restore, identityReady, isPurchasing, isRestoring, refreshOffers } = useSubscription();
+  const [catalog, setCatalog] = useState<{ products: Product[]; examples: any[] } | null>(null);
+  const [wallet, setWallet] = useState<Wallet | null>(null);
+  const [tab, setTab] = useState('monthly');
+  const [more, setMore] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [selection, setSelection] = useState<{ product: Product; pkg: PurchasesPackage } | null>(null);
+  const [working, setWorking] = useState(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { const [c, w] = await Promise.all([api.creditsCatalog(), api.creditsWallet()]); setCatalog(c); setWallet(w); }
+    catch (e: any) { setNotice(e.message || 'Could not load purchase information.'); }
+    finally { setLoading(false); }
   }, []);
-
-  const currentOffering = offerings?.current;
-
-  // Token-pack offering: we look for a dedicated RevenueCat offering called
-  // "tokens" (recommended), then fall back to the current offering's custom
-  // packages (identifier = tokens_25 / tokens_100 / tokens_500).
-  const tokenOffering: PurchasesOffering | null = useMemo(() => {
-    if (!offerings) return null;
-    const named = offerings.all?.['tokens'];
-    if (named && named.availablePackages?.length) return named;
-    return currentOffering ?? null;
-  }, [offerings, currentOffering]);
-
-  const findPkg = (id: string): PurchasesPackage | null =>
-    tokenOffering?.availablePackages?.find(
-      (p) => p.identifier === id || p.product.identifier === id,
-    ) ?? null;
-
-  const tokenPackages: (TokenPackMeta & { pkg: PurchasesPackage | null })[] = useMemo(
-    () => TOKEN_PACK_META.map((m) => ({ ...m, pkg: findPkg(m.productId) })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tokenOffering],
-  );
-
-  const monthlyPkg = useMemo<PurchasesPackage | null>(
-    () => currentOffering?.availablePackages?.find((p) => p.identifier === '$rc_monthly') ?? null,
-    [currentOffering],
-  );
-  const annualPkg = useMemo<PurchasesPackage | null>(
-    () => currentOffering?.availablePackages?.find((p) => p.identifier === '$rc_annual') ?? null,
-    [currentOffering],
-  );
-  const weeklyPkg = useMemo<PurchasesPackage | null>(
-    () => currentOffering?.availablePackages?.find((p) => p.identifier === '$rc_weekly') ?? null,
-    [currentOffering],
-  );
-
-  const activeProPkg =
-    selected === 'annual' ? annualPkg : selected === 'monthly' ? monthlyPkg : weeklyPkg;
-  const activePackPkg = tokenPackages.find((p) => p.productId === selectedPack)?.pkg ?? null;
-  const activePkg = tab === 'pro' ? activeProPkg : activePackPkg;
-
-  // Derived values for the UI (never hardcoded; computed from live offerings).
-  const annualYearly = annualPkg?.product.price ?? 0;
-  const monthlyMonthly = monthlyPkg?.product.price ?? 0;
-  const annualEquivalentMonthly = annualYearly > 0 ? annualYearly / 12 : 0;
-  const savingsPct =
-    monthlyMonthly > 0 && annualEquivalentMonthly > 0
-      ? Math.round((1 - annualEquivalentMonthly / monthlyMonthly) * 100)
-      : 0;
-
-  const monthlyHasTrial =
-    (monthlyPkg?.product?.introPrice && monthlyPkg.product.introPrice.price === 0) ?? false;
-
-  // Per-token pricing comparison (lowest in the lineup = best value)
-  const pricePerToken = tokenPackages.map((p) =>
-    p.pkg && p.pkg.product.price > 0 ? p.pkg.product.price / p.tokens : Number.POSITIVE_INFINITY,
-  );
-  const starterPerToken = pricePerToken[0];
-  const perTokenSavings = tokenPackages.map((p, i) =>
-    pricePerToken[i] !== Infinity && starterPerToken !== Infinity && starterPerToken > 0
-      ? Math.max(0, Math.round((1 - pricePerToken[i] / starterPerToken) * 100))
-      : 0,
-  );
-
-  const canBuy = rcEnabled && !!activePkg && identityReady;
-  const subscriptionsUnavailable =
-    !isLoading && (!currentOffering || (!monthlyPkg && !annualPkg && !weeklyPkg));
-  const tokenPacksUnavailable = !isLoading && !tokenPackages.some((p) => p.pkg);
-
-  // --- Balance pill: live free_gens remaining + tokens. ---
-  const freeGensRemaining = Number(user?.free_gens_remaining ?? 0);
-  const tokensBalance = Number(user?.tokens_balance ?? 0);
-  const freeExpiresAt = user?.free_gens_expires_at ?? null;
-  const freeDaysLeft = useMemo(() => {
-    if (!freeExpiresAt) return 0;
-    try {
-      const diff = new Date(freeExpiresAt).getTime() - Date.now();
-      return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
-    } catch {
-      return 0;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [freeExpiresAt, tick]);
-
-  // --- Purchase handlers ---
-  const confirmAndBuy = async () => {
-    if (!activePkg) return;
-    if (__DEV__ || Platform.OS === 'web') {
-      setConfirmOpen(true);
-      return;
-    }
-    await doPurchase();
+  useFocusEffect(useCallback(() => { void load(); }, [load]));
+  const getPackage = (product: Product) => {
+    const offering = product.offering_id ? offerings?.all?.[product.offering_id] : undefined;
+    return offering?.availablePackages.find((p) => p.identifier === product.package_id && p.product.identifier === product.product_id
+      && (product.kind === 'monthly' ? p.product.subscriptionPeriod === 'P1M' : !p.product.subscriptionPeriod));
   };
-
-  const doPurchase = async () => {
-    setConfirmOpen(false);
-    if (!activePkg) return;
+  const buy = async () => {
+    if (!selection || working || !identityReady) return;
+    setWorking(true);
+    let intentId: string | undefined;
     try {
-      await purchase(activePkg);
-      await refresh();
-      if (tab === 'pro') {
-        setInfoBanner('🎉 Welcome to AiForge Pro! Your account is unlocked.');
-      } else {
-        const meta = tokenPackages.find((p) => p.productId === selectedPack);
-        setInfoBanner(
-          `✨ ${meta?.tokens ?? ''} tokens added — your balance is updating now.`,
-        );
-      }
+      const intent = await api.creditIntent(selection.product.id);
+      intentId = intent.intent_id;
+      await purchase(selection.pkg);
+      setNotice('Store purchase received. Credits appear only after payment verification. If delayed, refresh status — do not buy again.');
+      await load(); await refresh();
     } catch (e: any) {
-      const msg = String(e?.message || e || '');
-      if (msg.toLowerCase().includes('cancel') || e?.userCancelled) return;
-      if (msg.includes('identity_not_ready')) {
-        setInfoBanner('Purchases are temporarily unavailable. Try again shortly.');
-      } else {
-        setInfoBanner(`Purchase failed: ${msg}`);
-      }
-    }
+      if (e?.userCancelled && intentId) {
+        await api.cancelCreditIntent(intentId).catch(() => {});
+        setNotice('Purchase cancelled in the store. No allowance was added.');
+      } else setNotice(e?.message || 'Purchase status is uncertain. Refresh status before trying again.');
+    } finally { setSelection(null); setWorking(false); }
   };
-
-  const doRestore = async () => {
+  const restorePurchases = async () => {
     try {
-      await restore();
-      await refresh();
-      setInfoBanner(
-        isSubscribed
-          ? 'Your Pro subscription is active.'
-          : 'No active subscription was found on this Google account.',
-      );
-    } catch (e: any) {
-      setInfoBanner(`Restore failed: ${String(e?.message || e)}`);
-    }
+      const result = await restore(); await load(); await refresh();
+      setNotice(result.entitlements.active.pro ? 'Eligible subscription found. Verified credits remain linked to your AiForge account.'
+        : 'No active subscription found on this store account. Consumed packs are not recreated. Remaining purchased credits stay in your AiForge account.');
+    } catch (e: any) { setNotice(e.message || 'Could not restore purchases.'); }
   };
-
-  // ---------------------------------------------------------------------
-  return (
-    <SafeAreaView style={styles.root}>
-      <StarryBackground />
-      <GhostLogoBackground />
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Balance pill */}
-        <View style={styles.balanceRow}>
-          <View style={styles.balancePill}>
-            <Gift color={colors.green} size={14} />
-            <Text style={styles.balancePillText}>
-              <Text style={{ color: colors.text, fontWeight: '700' }}>{freeGensRemaining}</Text> free
-              {freeDaysLeft > 0 ? (
-                <Text style={{ color: colors.textMuted }}>  ·  {freeDaysLeft}d left</Text>
-              ) : null}
-            </Text>
-          </View>
-          <View style={styles.balancePill}>
-            <Coins color={colors.yellow} size={14} />
-            <Text style={styles.balancePillText}>
-              <Text style={{ color: colors.text, fontWeight: '700' }}>{tokensBalance}</Text> tokens
-            </Text>
-          </View>
-        </View>
-
-        {/* Urgency banner — only when user has ≤2 free gens left or 0 tokens */}
-        {freeGensRemaining <= 2 && tokensBalance === 0 && !isSubscribed && (
-          <View style={styles.urgencyBanner}>
-            <Flame color={colors.yellow} size={16} />
-            <Text style={styles.urgencyText}>
-              {freeGensRemaining === 0
-                ? "You're out of free gens — grab a pack or go Pro to keep creating."
-                : `Only ${freeGensRemaining} free gen${freeGensRemaining === 1 ? '' : 's'} left — top up before you run dry.`}
-            </Text>
-          </View>
-        )}
-
-        {/* Hero */}
-        <View style={styles.hero}>
-          <View style={styles.crownBadge}>
-            <Crown color={colors.cyan} size={28} />
-          </View>
-          <Text style={styles.heroTitle}>Power up AiForge</Text>
-          <Text style={styles.heroSub}>
-            Go Pro for unlimited daily gens, or grab a pack of tokens — pay once, no subscription.
-          </Text>
-          <View style={styles.proofRow}>
-            <View style={styles.proofStars}>
-              {[0, 1, 2, 3, 4].map((i) => (
-                <Star key={i} fill={colors.yellow} color={colors.yellow} size={12} />
-              ))}
-            </View>
-            <Text style={styles.proofText}>{SOCIAL_PROOF}</Text>
-          </View>
-        </View>
-
-        {/* Mode toggle */}
-        <View style={styles.toggleWrap}>
-          <ToggleBtn
-            active={tab === 'pro'}
-            onPress={() => setTab('pro')}
-            label="Subscribe"
-            sub="Best for daily use"
-          />
-          <ToggleBtn
-            active={tab === 'tokens'}
-            onPress={() => setTab('tokens')}
-            label="Token packs"
-            sub="One-time, no renewal"
-          />
-        </View>
-
-        {/* Banners */}
-        {!!purchaseIdentityError && (
-          <View style={styles.banner}>
-            <Text style={styles.bannerText}>{purchaseIdentityError}</Text>
-          </View>
-        )}
-        {!!infoBanner && (
-          <View style={styles.infoBanner}>
-            <Text style={styles.infoText}>{infoBanner}</Text>
-          </View>
-        )}
-
-        {isLoading ? (
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator color={colors.cyan} />
-            <Text style={styles.loadingText}>Loading offers…</Text>
-          </View>
-        ) : tab === 'pro' ? (
-          <ProTab
-            isSubscribed={isSubscribed}
-            subscriptionsUnavailable={subscriptionsUnavailable}
-            monthlyPkg={monthlyPkg}
-            annualPkg={annualPkg}
-            weeklyPkg={weeklyPkg}
-            selected={selected}
-            setSelected={setSelected}
-            savingsPct={savingsPct}
-            annualEquivalentMonthly={annualEquivalentMonthly}
-            monthlyHasTrial={monthlyHasTrial}
-            canBuy={canBuy}
-            isPurchasing={isPurchasing}
-            confirmAndBuy={confirmAndBuy}
-          />
-        ) : (
-          <TokensTab
-            tokenPacks={tokenPackages}
-            selectedPack={selectedPack}
-            setSelectedPack={setSelectedPack}
-            perTokenSavings={perTokenSavings}
-            canBuy={canBuy}
-            isPurchasing={isPurchasing}
-            confirmAndBuy={confirmAndBuy}
-            tokenPacksUnavailable={tokenPacksUnavailable}
-          />
-        )}
-
-        {/* Trust indicators + restore */}
-        <View style={styles.trustRow}>
-          <View style={styles.trustItem}>
-            <ShieldCheck color={colors.textDim} size={14} />
-            <Text style={styles.trustText}>
-              Secured by {Platform.OS === 'ios' ? 'App Store' : 'Google Play'}
-            </Text>
-          </View>
-          <View style={styles.trustItem}>
-            <Lock color={colors.textDim} size={14} />
-            <Text style={styles.trustText}>
-              {tab === 'pro' ? 'Cancel anytime' : 'Tokens never expire'}
-            </Text>
-          </View>
-        </View>
-
-        <PressableScale onPress={doRestore} style={styles.restoreBtn}>
-          <RefreshCw color={colors.textDim} size={14} />
-          <Text style={styles.restoreText}>
-            {isRestoring ? 'Checking…' : 'Restore purchases'}
-          </Text>
-        </PressableScale>
-
-        <Text style={styles.disclaimer}>
-          {(() => {
-            // Platform-aware billing copy — the same build ships to Play and
-            // (via EAS/TestFlight) to the App Store. Hardcoding "Google Play"
-            // was a review flag on iOS.
-            const store = Platform.OS === 'ios' ? 'App Store' : 'Google Play';
-            const manage =
-              Platform.OS === 'ios'
-                ? 'Settings → Apple ID → Subscriptions'
-                : 'Google Play → Payments → Subscriptions';
-            return tab === 'pro'
-              ? `Subscriptions are billed through your ${store} account. Auto-renews unless cancelled at least 24h before the end of the current period. Manage or cancel anytime in ${manage}.`
-              : `Token packs are one-time purchases billed through your ${store} account. Tokens stay on your account until used — no auto-renewal, nothing to cancel.`;
-          })()}
-        </Text>
-        <View style={styles.linkRow}>
-          <Text style={styles.linkText} onPress={() => router.push('/legal/terms')}>Terms</Text>
-          <Text style={styles.linkDot}>·</Text>
-          <Text style={styles.linkText} onPress={() => router.push('/legal/privacy')}>Privacy</Text>
-        </View>
-
-        <View style={styles.currentWrap}>
-          <View style={styles.currentPill}>
-            <Sparkles color={colors.textDim} size={12} />
-            <Text style={styles.currentText}>
-              Current plan: <Text style={{ color: colors.cyan }}>{user?.plan ?? 'free'}</Text>
-              {user ? `  •  ${user.daily_used}/${user.daily_limit} today` : ''}
-            </Text>
-          </View>
-        </View>
-      </ScrollView>
-
-      {/* Dev / web confirmation modal */}
-      <Modal
-        visible={confirmOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setConfirmOpen(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Confirm test purchase</Text>
-            <Text style={styles.modalBody}>
-              You&apos;re on a dev / web preview. Tapping Confirm will simulate the purchase via
-              the RevenueCat Test Store (no real charge).
-            </Text>
-            <View style={styles.modalBtnRow}>
-              <PressableScale onPress={() => setConfirmOpen(false)} style={styles.modalCancel}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </PressableScale>
-              <GradientButton title="Confirm" onPress={doPurchase} />
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
-  );
+  const manage = async () => {
+    try { await Linking.openURL(Platform.OS === 'ios' ? 'https://apps.apple.com/account/subscriptions' : 'https://play.google.com/store/account/subscriptions'); }
+    catch { setNotice('Open your app store account → Subscriptions to manage or cancel.'); }
+  };
+  const refreshStatus = async () => { await load(); await refreshOffers(); setNotice('Balances refreshed. Pending payments do not unlock credits. Do not repeat a delayed purchase.'); };
+  const visible = catalog?.products.filter((p) => p.kind === tab && (tab === 'monthly' || more || p.price_usd < 200)) || [];
+  return <SafeAreaView style={styles.root} testID="plans-screen" edges={['top']}>
+    <ScrollView contentContainerStyle={styles.content}>
+      <View style={styles.heading}><Ionicons name="sparkles-outline" size={28} color={colors.cyan} /><Text testID="plans-title" style={styles.title}>Create on your terms</Text></View>
+      <Text testID="plans-description" style={styles.body}>Monthly credits or a one-time pack. No unlimited promises. Every AI action is quoted before it starts.</Text>
+      <View style={styles.wallet} testID="credit-wallet-card">
+        <Text style={styles.eyebrow}>AVAILABLE CREDITS</Text><Text style={styles.balance} testID="credit-wallet-total">{wallet?.total.toLocaleString() ?? '—'}</Text>
+        <View style={styles.row}>{[['Monthly', wallet?.monthly], ['Purchased', wallet?.purchased], ['Intro', wallet?.promo]].map(([name, value]) => <View style={styles.bucket} key={String(name)}>
+          <Text style={styles.body}>{name}</Text><Text style={styles.bucketValue} testID={`credit-balance-${String(name).toLowerCase()}`}>{value?.toLocaleString() ?? '—'}</Text>
+        </View>)}</View>
+        {wallet?.lots.filter((x) => !!x.expires_at).map((lot) => <Text key={lot.id} style={styles.small} testID={`credit-expiry-${lot.id}`}>{lot.kind === 'monthly' ? 'Monthly' : 'Intro'}: {lot.remaining.toLocaleString()} expire {new Date(lot.expires_at!).toLocaleDateString()}</Text>)}
+        <Text testID="credits-spending-order" style={styles.small}>Expiring credits are used first. Purchased credits never expire.</Text>
+        {wallet?.starter_pending && <Text testID="starter-pending" style={styles.warning}>The 100-credit introduction is pending funded promotional availability. It is not a daily grant.</Text>}
+      </View>
+      {wallet && (wallet.legacy_tokens > 0 || wallet.legacy_plan !== 'free') && <View style={styles.note}>
+        <Text testID="legacy-benefits" style={styles.body}>Existing {wallet.legacy_plan} terms and {wallet.legacy_tokens} legacy tokens are preserved separately. They have not been converted or overwritten.</Text>
+      </View>}
+      {__DEV__ && <Text testID="plans-test-store-notice" style={styles.warning}>Test Store preview — simulated purchases, not Google Play charges.</Text>}
+      {!!notice && <Text testID="plans-purchase-status" style={styles.notice}>{notice}</Text>}
+      <View style={styles.tabs}>{[['monthly', 'Monthly plans'], ['purchased', 'One-time packs']].map(([key, label]) => <Pressable testID={`plans-${key}-tab`} key={key} onPress={() => setTab(key)} style={[styles.tab, tab === key && styles.tabActive]}><Text style={styles.text}>{label}</Text></Pressable>)}</View>
+      <Text style={styles.body} testID="plans-period-terms">{tab === 'monthly' ? 'Renews monthly. Credits refresh on the paid billing anniversary; unused monthly credits expire at period end. Cancel before renewal in your store.' : 'No subscription required. One payment, no renewal. Purchased credits do not expire and cannot be transferred or redeemed for cash.'}</Text>
+      {loading && <ActivityIndicator testID="plans-loading" color={colors.cyan} />}
+      {visible.map((product) => {
+        const pkg = getPackage(product);
+        // Conservative floor retains >=50% of net after 30% store fees,
+        // 1% billing fees, 5% refund reserve and the full AI allocation.
+        const floor = pkg?.product.currencyCode === 'USD' ? product.credits / 320 : product.minimum_local_prices?.[pkg?.product.currencyCode || ''];
+        const priceApproved = !!pkg && floor !== undefined && pkg.product.price >= floor;
+        const enabled = product.available && priceApproved && identityReady && !working && !isPurchasing && !isRestoring;
+        return <View key={product.id} testID={`catalog-${product.id}`} style={[styles.product, product.suggested && styles.suggested]}>
+          {product.suggested && <Text testID="creator-suggested" style={styles.tag}>SUGGESTED STARTING POINT</Text>}
+          <View style={styles.row}><Text style={styles.productName}>{product.name}</Text><Text style={styles.price} testID={`price-${product.id}`}>{pkg?.product.priceString || `$${product.price_usd.toFixed(2)}`}</Text></View>
+          <Text testID={`allowance-${product.id}`} style={styles.allowance}>{product.credits.toLocaleString()} credits {tab === 'monthly' ? '/ billing month' : '· one time'}</Text>
+          {!pkg && <Text style={styles.small} testID={`reference-price-${product.id}`}>USD reference price — live localized store price not available yet.</Text>}
+          {!enabled && <Text style={styles.small} testID={`availability-${product.id}`}>{!identityReady ? 'Sign-in and store identity must be ready before buying.' : product.reason || (pkg && !priceApproved ? 'This market’s price needs verification before this allowance can be sold.' : 'Matching monthly/consumable store product is not available on this device.')}</Text>}
+          <Pressable testID={`buy-${product.id}`} disabled={!enabled} onPress={() => pkg && setSelection({ product, pkg })} style={[styles.buy, !enabled && styles.disabled]}>
+            <Text style={styles.buyText}>{enabled ? `Review ${product.name}` : 'Not available to purchase'}</Text>
+          </Pressable>
+        </View>;
+      })}
+      {tab === 'purchased' && <Pressable testID="plans-more-packs" onPress={() => setMore(!more)} style={styles.link}><Text style={styles.linkText}>{more ? 'Fewer packs' : 'More packs · $249.99–$999.99'}</Text></Pressable>}
+      <View style={styles.note}><Text style={styles.productName}>What can credits create?</Text>
+        {catalog?.examples.length ? catalog.examples.map((x) => <Text key={`${x.action}-${x.quality}`} testID={`quote-example-${x.action}-${x.quality}`} style={styles.body}>{x.action.replace('_', ' ')} · {x.quality}: {x.credits} credits for the displayed request limit</Text>) : <Text testID="quotes-awaiting-pricing" style={styles.body}>Provider costs and funded reserves are being verified. No made-up generation counts are advertised. Unpriced AI tools and video generation remain unavailable; local editing stays free.</Text>}
+      </View>
+      <Pressable testID="plans-refresh-status" onPress={refreshStatus} disabled={loading || working} style={styles.link}><Text style={styles.linkText}>Refresh purchase status</Text></Pressable>
+      <Pressable testID="plans-restore-purchases" onPress={restorePurchases} disabled={!identityReady || isRestoring || working} style={styles.link}><Text style={styles.linkText}>{isRestoring ? 'Restoring…' : 'Restore eligible purchases'}</Text></Pressable>
+      <Pressable testID="plans-manage-subscription" onPress={manage} style={styles.link}><Text style={styles.linkText}>Manage or cancel subscription</Text></Pressable>
+      <Text testID="plans-billing-terms" style={styles.small}>Prices and renewal terms shown by your store control your purchase. Pending payments do not grant credits. Refunds follow store policies and applicable law. Deleting AiForge does not cancel a subscription.</Text>
+      <View style={styles.row}><Pressable testID="plans-terms-link" onPress={() => router.push('/legal/terms')} style={styles.link}><Text style={styles.linkText}>Terms</Text></Pressable><Pressable testID="plans-privacy-link" onPress={() => router.push('/legal/privacy')} style={styles.link}><Text style={styles.linkText}>Privacy</Text></Pressable><Pressable testID="plans-credit-history" onPress={() => router.push('/credits-history')} style={styles.link}><Text style={styles.linkText}>Usage history</Text></Pressable></View>
+    </ScrollView>
+    <Modal testID="plans-purchase-dialog" visible={!!selection} transparent animationType="slide" onRequestClose={() => !working && setSelection(null)}>
+      <View testID="plans-purchase-confirmation" style={styles.scrim}><SafeAreaView style={styles.confirm} edges={['bottom']}>
+        <Text style={styles.productName} testID="purchase-confirm-title">Review your purchase</Text>
+        <Text style={styles.balance} testID="purchase-confirm-price">{selection?.pkg.product.priceString}</Text>
+        <Text style={styles.body} testID="purchase-confirm-details">{selection?.product.credits.toLocaleString()} credits. {selection?.product.kind === 'monthly' ? 'Auto-renews monthly. Unused monthly credits expire each period.' : 'One-time purchase. No subscription. Credits never expire.'}</Text>
+        {(selection?.product.price_usd || 0) >= 200 && <Text testID="large-pack-warning" style={styles.warning}>This is a high-value purchase. Review the full localized amount carefully. Credits are not cash and cannot be withdrawn.</Text>}
+        {__DEV__ && <Text style={styles.warning} testID="purchase-simulation-disclosure">Test Store simulation — no real store charge.</Text>}
+        <Pressable testID="purchase-final-confirm" onPress={buy} disabled={working} style={styles.buy}>{working ? <ActivityIndicator color={colors.bg} /> : <Text style={styles.buyText}>Continue to store confirmation</Text>}</Pressable>
+        <Pressable testID="purchase-cancel" disabled={working} onPress={() => setSelection(null)} style={styles.link}><Text style={styles.linkText}>Cancel</Text></Pressable>
+      </SafeAreaView></View>
+    </Modal>
+  </SafeAreaView>;
 }
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-function ToggleBtn({
-  active,
-  onPress,
-  label,
-  sub,
-}: {
-  active: boolean;
-  onPress: () => void;
-  label: string;
-  sub: string;
-}) {
-  return (
-    <PressableScale onPress={onPress} style={{ flex: 1 }}>
-      <View style={[styles.toggleBtn, active && styles.toggleBtnActive]}>
-        <Text style={[styles.toggleBtnLabel, active && { color: colors.cyan }]}>{label}</Text>
-        <Text style={styles.toggleBtnSub}>{sub}</Text>
-      </View>
-    </PressableScale>
-  );
-}
-
-function ProTab(props: {
-  isSubscribed: boolean;
-  subscriptionsUnavailable: boolean;
-  monthlyPkg: PurchasesPackage | null;
-  annualPkg: PurchasesPackage | null;
-  weeklyPkg: PurchasesPackage | null;
-  selected: SelectedPlan;
-  setSelected: (p: SelectedPlan) => void;
-  savingsPct: number;
-  annualEquivalentMonthly: number;
-  monthlyHasTrial: boolean;
-  canBuy: boolean;
-  isPurchasing: boolean;
-  confirmAndBuy: () => void;
-}) {
-  const {
-    isSubscribed,
-    subscriptionsUnavailable,
-    monthlyPkg,
-    annualPkg,
-    weeklyPkg,
-    selected,
-    setSelected,
-    savingsPct,
-    annualEquivalentMonthly,
-    monthlyHasTrial,
-    canBuy,
-    isPurchasing,
-    confirmAndBuy,
-  } = props;
-
-  if (subscriptionsUnavailable) {
-    return (
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Subscriptions are coming online</Text>
-        <Text style={styles.cardBody}>
-          Pro subscriptions aren&apos;t available on this device yet. If you&apos;re on the Google
-          Play build, make sure you&apos;ve joined the testing track and have the latest version
-          installed.
-        </Text>
-      </View>
-    );
-  }
-
-  return (
-    <>
-      {/* Features */}
-      <View style={styles.featuresCard}>
-        {PRO_FEATURES.map(({ icon: Icon, label }) => (
-          <View key={label} style={styles.featureRow}>
-            <View style={styles.featureIcon}>
-              <Icon color={colors.cyan} size={14} />
-            </View>
-            <Text style={styles.featureText}>{label}</Text>
-            <Check color={colors.green} size={16} />
-          </View>
-        ))}
-      </View>
-
-      {/* Package picker */}
-      {annualPkg && (
-        <PackageOption
-          selected={selected === 'annual'}
-          onPress={() => setSelected('annual')}
-          recommended
-          tag={savingsPct > 0 ? `SAVE ${savingsPct}%` : 'BEST VALUE'}
-          title="Yearly"
-          priceLine={annualPkg.product.priceString}
-          subLine={
-            annualEquivalentMonthly
-              ? `Just ${formatCurrency(annualEquivalentMonthly, annualPkg.product.currencyCode)}/mo billed annually`
-              : 'Billed once per year'
-          }
-        />
-      )}
-      {monthlyPkg && (
-        <PackageOption
-          selected={selected === 'monthly'}
-          onPress={() => setSelected('monthly')}
-          tag={monthlyHasTrial ? '7-DAY FREE TRIAL' : null}
-          title="Monthly"
-          priceLine={`${monthlyPkg.product.priceString}/mo`}
-          subLine={monthlyHasTrial ? 'Free for 7 days, then auto-renews' : 'Billed monthly, cancel anytime'}
-        />
-      )}
-      {weeklyPkg && (
-        <PackageOption
-          selected={selected === 'weekly'}
-          onPress={() => setSelected('weekly')}
-          title="Weekly"
-          priceLine={`${weeklyPkg.product.priceString}/wk`}
-          subLine="Try Pro for a week — cancel anytime"
-        />
-      )}
-
-      <View style={styles.ctaWrap}>
-        {isSubscribed ? (
-          <View style={styles.activeChip}>
-            <ShieldCheck color={colors.green} size={16} />
-            <Text style={styles.activeChipText}>Pro is active — thank you!</Text>
-          </View>
-        ) : (
-          <GradientButton
-            title={
-              isPurchasing
-                ? 'Processing…'
-                : selected === 'monthly' && monthlyHasTrial
-                  ? 'Start 7-day free trial'
-                  : 'Start Pro'
-            }
-            onPress={confirmAndBuy}
-            disabled={!canBuy || isPurchasing}
-          />
-        )}
-      </View>
-    </>
-  );
-}
-
-function TokensTab(props: {
-  tokenPacks: (TokenPackMeta & { pkg: PurchasesPackage | null })[];
-  selectedPack: TokenPackMeta['productId'];
-  setSelectedPack: (id: TokenPackMeta['productId']) => void;
-  perTokenSavings: number[];
-  canBuy: boolean;
-  isPurchasing: boolean;
-  confirmAndBuy: () => void;
-  tokenPacksUnavailable: boolean;
-}) {
-  const {
-    tokenPacks,
-    selectedPack,
-    setSelectedPack,
-    perTokenSavings,
-    canBuy,
-    isPurchasing,
-    confirmAndBuy,
-    tokenPacksUnavailable,
-  } = props;
-
-  if (tokenPacksUnavailable) {
-    return (
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Token packs setup pending</Text>
-        <Text style={styles.cardBody}>
-          Create a RevenueCat offering named <Text style={{ color: colors.cyan }}>tokens</Text> with
-          three Consumable products — <Text style={{ color: colors.cyan }}>tokens_25</Text>,
-          <Text style={{ color: colors.cyan }}> tokens_100</Text> and{' '}
-          <Text style={{ color: colors.cyan }}>tokens_500</Text> — then redeploy. The app will pick
-          them up automatically.
-        </Text>
-      </View>
-    );
-  }
-
-  return (
-    <>
-      {/* How tokens work */}
-      <View style={styles.featuresCard}>
-        <View style={styles.featureRow}>
-          <View style={styles.featureIcon}>
-            <ImageIcon color={colors.green} size={14} />
-          </View>
-          <Text style={styles.featureText}>1 token = 1 AI image</Text>
-        </View>
-        <View style={styles.featureRow}>
-          <View style={styles.featureIcon}>
-            <Video color={colors.cyan} size={14} />
-          </View>
-          <Text style={styles.featureText}>3 tokens = 1 AI video or 3D model</Text>
-        </View>
-        <View style={styles.featureRow}>
-          <View style={styles.featureIcon}>
-            <Sparkles color={colors.yellow} size={14} />
-          </View>
-          <Text style={styles.featureText}>Voice chat replies are always free</Text>
-        </View>
-        <View style={styles.featureRow}>
-          <View style={styles.featureIcon}>
-            <Timer color={colors.purple} size={14} />
-          </View>
-          <Text style={styles.featureText}>Tokens never expire — use whenever you want</Text>
-        </View>
-      </View>
-
-      {/* Pack cards */}
-      <View style={styles.packsGrid}>
-        {tokenPacks.map((meta, i) => (
-          <TokenPackCard
-            key={meta.productId}
-            meta={meta}
-            selected={selectedPack === meta.productId}
-            onPress={() => setSelectedPack(meta.productId)}
-            saveLabel={perTokenSavings[i] > 0 ? `SAVE ${perTokenSavings[i]}%` : null}
-          />
-        ))}
-      </View>
-
-      <View style={styles.ctaWrap}>
-        <GradientButton
-          title={isPurchasing ? 'Processing…' : 'Buy tokens'}
-          onPress={confirmAndBuy}
-          disabled={!canBuy || isPurchasing}
-        />
-      </View>
-    </>
-  );
-}
-
-function TokenPackCard({
-  meta,
-  selected,
-  onPress,
-  saveLabel,
-}: {
-  meta: TokenPackMeta & { pkg: PurchasesPackage | null };
-  selected: boolean;
-  onPress: () => void;
-  saveLabel: string | null;
-}) {
-  const price = meta.pkg?.product.priceString ?? '—';
-  const disabled = !meta.pkg;
-  return (
-    <PressableScale onPress={disabled ? undefined : onPress} style={{ marginBottom: 10 }}>
-      <LinearGradient
-        colors={selected ? meta.gradient : [colors.border, colors.border]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[packStyles.shell, { padding: selected ? 1.5 : 1, opacity: disabled ? 0.5 : 1 }]}
-      >
-        <View style={[packStyles.inner, selected && packStyles.innerSelected]}>
-          <View style={packStyles.left}>
-            <View style={packStyles.titleRow}>
-              <Coins color={meta.gradient[0]} size={16} />
-              <Text style={packStyles.title}>{meta.title}</Text>
-              {!!meta.badge && (
-                <View style={[packStyles.badge, { backgroundColor: meta.gradient[0] + '2A' }]}>
-                  <Text style={[packStyles.badgeText, { color: meta.gradient[0] }]}>
-                    {meta.badge}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <Text style={packStyles.tokenCount}>{meta.tokens.toLocaleString()} tokens</Text>
-            <Text style={packStyles.perk}>{meta.perk}</Text>
-            {!!saveLabel && (
-              <View style={packStyles.savingsRow}>
-                <TrendingUp color={colors.green} size={12} />
-                <Text style={packStyles.savingsText}>{saveLabel} vs starter</Text>
-              </View>
-            )}
-          </View>
-          <View style={packStyles.right}>
-            <Text style={packStyles.price}>{price}</Text>
-            <Text style={packStyles.oneTime}>one-time</Text>
-            <View style={[packStyles.radio, selected && packStyles.radioSelected]}>
-              {selected && <View style={packStyles.radioDot} />}
-            </View>
-          </View>
-        </View>
-      </LinearGradient>
-    </PressableScale>
-  );
-}
-
-function PackageOption({
-  selected,
-  onPress,
-  recommended,
-  tag,
-  title,
-  priceLine,
-  subLine,
-}: {
-  selected: boolean;
-  onPress: () => void;
-  recommended?: boolean;
-  tag?: string | null;
-  title: string;
-  priceLine: string;
-  subLine: string;
-}) {
-  const Shell = recommended ? LinearGradient : View;
-  const shellProps: any = recommended
-    ? {
-        colors: selected ? [colors.cyan, colors.purple] : [colors.border, colors.border],
-        start: { x: 0, y: 0 },
-        end: { x: 1, y: 1 },
-      }
-    : {};
-  return (
-    <PressableScale onPress={onPress}>
-      <Shell {...shellProps} style={[pkgStyles.shell, { padding: selected ? 1.5 : 1 }]}>
-        <View style={[pkgStyles.inner, selected ? pkgStyles.innerSelected : null]}>
-          <View style={pkgStyles.left}>
-            <View style={pkgStyles.titleRow}>
-              <Text style={pkgStyles.title}>{title}</Text>
-              {!!tag && (
-                <View style={pkgStyles.tag}>
-                  <Text style={pkgStyles.tagText}>{tag}</Text>
-                </View>
-              )}
-            </View>
-            <Text style={pkgStyles.subLine}>{subLine}</Text>
-          </View>
-          <View style={pkgStyles.right}>
-            <Text style={pkgStyles.price}>{priceLine}</Text>
-            <View style={[pkgStyles.radio, selected ? pkgStyles.radioSelected : null]}>
-              {selected && <View style={pkgStyles.radioDot} />}
-            </View>
-          </View>
-        </View>
-      </Shell>
-    </PressableScale>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
-
-function formatCurrency(value: number, code?: string): string {
-  try {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: code || 'USD',
-      maximumFractionDigits: 2,
-    }).format(value);
-  } catch {
-    return `$${value.toFixed(2)}`;
-  }
-}
-
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: 20, paddingBottom: 48 },
-
-  balanceRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
-  balancePill: {
-    flexDirection: 'row',
-    gap: 6,
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  balancePillText: { color: colors.textDim, fontSize: 12 },
-
-  urgencyBanner: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,214,10,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,214,10,0.35)',
-    borderRadius: radius.md,
-    padding: 12,
-    marginBottom: 14,
-  },
-  urgencyText: { color: colors.yellow, fontSize: 12, flex: 1 },
-
-  hero: { alignItems: 'center', marginTop: 4, marginBottom: 16 },
-  crownBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(0,240,255,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(0,240,255,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  heroTitle: { color: colors.text, fontSize: 26, fontWeight: '800', letterSpacing: 0.3 },
-  heroSub: {
-    color: colors.textDim,
-    fontSize: 14,
-    marginTop: 6,
-    textAlign: 'center',
-    maxWidth: 320,
-    lineHeight: 20,
-  },
-  proofRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 12 },
-  proofStars: { flexDirection: 'row', gap: 2 },
-  proofText: { color: colors.textDim, fontSize: 11 },
-
-  toggleWrap: {
-    flexDirection: 'row',
-    gap: 8,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: 4,
-    marginBottom: 16,
-  },
-  toggleBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  toggleBtnActive: { backgroundColor: 'rgba(0,240,255,0.08)' },
-  toggleBtnLabel: { color: colors.textDim, fontSize: 14, fontWeight: '700' },
-  toggleBtnSub: { color: colors.textMuted, fontSize: 10, marginTop: 2 },
-
-  banner: {
-    backgroundColor: 'rgba(255,45,85,0.14)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,45,85,0.4)',
-    borderRadius: radius.md,
-    padding: 12,
-    marginBottom: 12,
-  },
-  bannerText: { color: colors.red, fontSize: 13 },
-  infoBanner: {
-    backgroundColor: 'rgba(0,240,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(0,240,255,0.3)',
-    borderRadius: radius.md,
-    padding: 12,
-    marginBottom: 12,
-  },
-  infoText: { color: colors.cyan, fontSize: 13 },
-
-  featuresCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-    marginBottom: 16,
-    gap: 10,
-  },
-  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  featureIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(0,240,255,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  featureText: { color: colors.text, fontSize: 13, flex: 1 },
-
-  packsGrid: { marginBottom: 4 },
-
-  loadingWrap: { alignItems: 'center', paddingVertical: 48 },
-  loadingText: { color: colors.textDim, marginTop: 10, fontSize: 13 },
-
-  card: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    padding: 20,
-  },
-  cardTitle: { color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: 6 },
-  cardBody: { color: colors.textDim, fontSize: 13, lineHeight: 20 },
-
-  ctaWrap: { marginTop: 16 },
-  activeChip: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,255,102,0.14)',
-    paddingHorizontal: 10,
-    paddingVertical: 12,
-    borderRadius: radius.pill,
-  },
-  activeChipText: { color: colors.green, fontSize: 14, fontWeight: '700' },
-
-  trustRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 16,
-    marginTop: 14,
-  },
-  trustItem: { flexDirection: 'row', gap: 6, alignItems: 'center' },
-  trustText: { color: colors.textDim, fontSize: 11 },
-
-  restoreBtn: {
-    marginTop: 16,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    gap: 6,
-    alignItems: 'center',
-    padding: 8,
-  },
-  restoreText: { color: colors.textDim, fontSize: 13, textDecorationLine: 'underline' },
-
-  disclaimer: {
-    color: colors.textMuted,
-    fontSize: 11,
-    lineHeight: 16,
-    textAlign: 'center',
-    marginTop: 16,
-    paddingHorizontal: 8,
-  },
-  linkRow: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 10 },
-  linkText: { color: colors.textDim, fontSize: 11, textDecorationLine: 'underline' },
-  linkDot: { color: colors.textMuted, fontSize: 11 },
-
-  currentWrap: { alignItems: 'center', marginTop: 24 },
-  currentPill: {
-    flexDirection: 'row',
-    gap: 6,
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-  },
-  currentText: { color: colors.textDim, fontSize: 11 },
-
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 360,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  modalTitle: { color: colors.text, fontSize: 18, fontWeight: '700' },
-  modalBody: { color: colors.textDim, fontSize: 13, marginTop: 8, lineHeight: 20 },
-  modalBtnRow: { flexDirection: 'row', gap: 12, marginTop: 16, alignItems: 'center' },
-  modalCancel: { paddingHorizontal: 16, paddingVertical: 10 },
-  modalCancelText: { color: colors.textDim, fontSize: 14 },
-});
-
-const pkgStyles = StyleSheet.create({
-  shell: { borderRadius: radius.lg, marginBottom: 10 },
-  inner: {
-    backgroundColor: colors.bgElev,
-    borderRadius: radius.lg - 2,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  innerSelected: { borderColor: 'transparent' },
-  left: { flex: 1 },
-  titleRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  title: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  tag: {
-    backgroundColor: 'rgba(0,240,255,0.18)',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: radius.pill,
-  },
-  tagText: { color: colors.cyan, fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
-  subLine: { color: colors.textDim, fontSize: 12, marginTop: 2 },
-  right: { alignItems: 'flex-end', gap: 10 },
-  price: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  radio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioSelected: { borderColor: colors.cyan },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.cyan },
-});
-
-const packStyles = StyleSheet.create({
-  shell: { borderRadius: radius.lg },
-  inner: {
-    backgroundColor: colors.bgElev,
-    borderRadius: radius.lg - 2,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  innerSelected: { borderColor: 'transparent' },
-  left: { flex: 1 },
-  titleRow: { flexDirection: 'row', gap: 6, alignItems: 'center', flexWrap: 'wrap' },
-  title: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  badge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: radius.pill,
-  },
-  badgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8 },
-  tokenCount: { color: colors.text, fontSize: 22, fontWeight: '800', marginTop: 6 },
-  perk: { color: colors.textDim, fontSize: 12, marginTop: 2 },
-  savingsRow: { flexDirection: 'row', gap: 4, alignItems: 'center', marginTop: 6 },
-  savingsText: { color: colors.green, fontSize: 11, fontWeight: '700' },
-  right: { alignItems: 'flex-end', gap: 6, marginLeft: 10 },
-  price: { color: colors.text, fontSize: 17, fontWeight: '800' },
-  oneTime: { color: colors.textMuted, fontSize: 10 },
-  radio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 4,
-  },
-  radioSelected: { borderColor: colors.cyan },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.cyan },
+  root: { flex: 1, backgroundColor: colors.bg }, content: { padding: 22, gap: 22, paddingBottom: 120 },
+  heading: { gap: 12 }, title: { fontSize: 32, fontWeight: '800', color: colors.text, letterSpacing: -0.8 },
+  body: { fontSize: 15, lineHeight: 23, color: colors.textDim }, small: { fontSize: 12, lineHeight: 19, color: colors.textDim },
+  text: { color: colors.text, fontSize: 14, fontWeight: '700' }, row: { flexDirection: 'row', gap: 12, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' },
+  wallet: { borderRadius: 24, backgroundColor: colors.cyan + '0C', borderWidth: 1, borderColor: colors.cyan + '44', padding: 22, gap: 18 },
+  eyebrow: { color: colors.cyan, fontSize: 11, letterSpacing: 2, fontWeight: '800' }, balance: { color: colors.text, fontSize: 40, fontWeight: '800' },
+  bucket: { gap: 5 }, bucketValue: { fontSize: 20, fontWeight: '700', color: colors.text },
+  note: { padding: 18, borderRadius: radius.lg, backgroundColor: colors.text + '08', gap: 12 },
+  warning: { color: colors.yellow, fontSize: 13, lineHeight: 21 }, notice: { color: colors.cyan, fontSize: 14, lineHeight: 22 },
+  tabs: { flexDirection: 'row', gap: 8 }, tab: { flex: 1, alignItems: 'center', paddingVertical: 15, minHeight: 48, borderRadius: radius.pill, backgroundColor: colors.text + '09' },
+  tabActive: { borderWidth: 1, borderColor: colors.cyan, backgroundColor: colors.cyan + '12' },
+  product: { borderWidth: 1, borderColor: colors.text + '18', borderRadius: 22, padding: 20, gap: 14 }, suggested: { borderColor: colors.cyan + '88' },
+  tag: { fontSize: 10, fontWeight: '800', letterSpacing: 1, color: colors.cyan }, productName: { color: colors.text, fontSize: 21, fontWeight: '800' },
+  price: { color: colors.text, fontSize: 24, fontWeight: '700' }, allowance: { color: colors.cyan, fontSize: 17, fontWeight: '600' },
+  buy: { backgroundColor: colors.cyan, borderRadius: 16, minHeight: 50, alignItems: 'center', justifyContent: 'center', padding: 12 },
+  buyText: { color: colors.bg, fontWeight: '800', fontSize: 14, textAlign: 'center' }, disabled: { opacity: 0.35 },
+  link: { minHeight: 46, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 }, linkText: { fontSize: 14, color: colors.cyan },
+  scrim: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.bg + 'DD' }, confirm: { padding: 26, gap: 22, backgroundColor: colors.bg, borderTopWidth: 1, borderColor: colors.cyan + '66', borderTopLeftRadius: 28, borderTopRightRadius: 28 },
 });

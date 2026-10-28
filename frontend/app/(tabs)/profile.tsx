@@ -182,7 +182,7 @@ export default function Profile() {
               <Crown size={22} color={colors.yellow} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.upgradeTitle}>Upgrade your plan</Text>
-                <Text style={styles.upgradeSub}>Unlock unlimited generations & priority queue.</Text>
+                <Text style={styles.upgradeSub}>Compare monthly credits and optional one-time packs.</Text>
               </View>
             </View>
           </PressableScale>
@@ -195,12 +195,10 @@ export default function Profile() {
             />
             <View style={styles.refHeader}>
               <Gift size={18} color={colors.green} />
-              <Text style={styles.refTitle}>Invite friends · Earn bonus</Text>
+              <Text style={styles.refTitle}>Invite friends to create</Text>
             </View>
             <Text style={styles.refSub}>
-              Share your code. When a friend signs up with it, you BOTH get
-              <Text style={{ color: colors.green, fontWeight: '900' }}> +20 generations / day </Text>
-              for 7 days.
+              Share your code. New introductory credits depend on eligibility and funded promotional availability. No automatic daily referral bonus is promised.
             </Text>
 
             <PressableScale onPress={onCopyCode} testID="ref-copy-code">
@@ -219,7 +217,7 @@ export default function Profile() {
                 <Text style={styles.refStatValue}>
                   {referral?.bonus_amount ? `+${referral.bonus_amount}` : '—'}
                 </Text>
-                <Text style={styles.refStatLabel}>Bonus / day</Text>
+                <Text style={styles.refStatLabel}>Legacy bonus / day</Text>
               </View>
               <View style={styles.refStat}>
                 <Text style={styles.refStatValue}>
@@ -274,9 +272,10 @@ export default function Profile() {
               <PressableScale onPress={() => router.push('/admin/secrets' as any)} testID="menu-admin-secrets">
                 <MenuItem
                   icon={<KeyRound size={16} color={colors.yellow} />}
-                  label="Owner · App Secrets"
-                  sub="Manage your Stripe API key securely"
+                  label="Owner · Settings"
+                  sub="Account recovery and owner controls"
                 />
+                <PressableScale testID="profile-owner-budget" onPress={() => router.push('/admin/budget')} style={{ minHeight: 52, padding: 16 }}><Text style={{ color: colors.cyan, fontWeight: '800' }}>Owner · AI budget & credit reserves</Text></PressableScale>
               </PressableScale>
             ) : null}
           </View>

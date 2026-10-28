@@ -12,8 +12,10 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from metering import MeteredRoute, current_quote
+from media_storage import store_document_media, put_media
 
-from ai_providers import generate_image
+from ai_providers import generate_image, bounded_image
 from core import (
     PLAN_LIMITS,
     daily_used,
@@ -26,7 +28,7 @@ from core import (
     user_to_out,
 )
 
-router = APIRouter(tags=["avatar"])
+router = APIRouter(tags=["avatar"], route_class=MeteredRoute)
 
 
 STYLE_PROMPTS = {
@@ -68,6 +70,8 @@ ALLOWED_STYLES = sorted(STYLE_PROMPTS.keys())
 # ---------- Models ----------
 class AvatarGenerateRequest(BaseModel):
     prompt: str
+    background: Literal["studio", "city", "nature"] = "studio"
+    framing: Literal["headshot", "shoulders"] = "headshot"
     style: Literal[
         "cyberpunk", "anime", "neon_noir", "fantasy", "pixel_art", "cinematic"
     ] = "cyberpunk"
@@ -86,7 +90,7 @@ async def avatar_generate(
     plan = user.get("plan", "free")
     limit = PLAN_LIMITS.get(plan, 5)
     used = await daily_used(user["user_id"])
-    if used >= limit:
+    if used >= limit and (not current_quote.get() or current_quote.get().get("legacy")):
         raise HTTPException(
             status_code=402, detail=f"Daily limit reached ({limit}). Upgrade your plan."
         )
@@ -104,6 +108,7 @@ async def avatar_generate(
         " Centered subject, high quality, no text, no watermarks, "
         "suitable as an app profile picture."
     )
+    prompt += f" Background: {req.background}. Framing: {'close-up face portrait' if req.framing == 'headshot' else 'head and shoulders'}."
 
     try:
         img_b64, mime = await generate_image(prompt)
@@ -128,7 +133,7 @@ async def avatar_generate(
         "media_mime": mime,
         "created_at": iso(now_utc()),
     }
-    await db.creations.insert_one(doc)
+    await db.creations.insert_one(await store_document_media(doc))
     await increment_usage(user["user_id"])
     return {
         "creation_id": creation_id,
@@ -151,9 +156,10 @@ async def avatar_set(req: AvatarSetRequest, user: dict = Depends(get_current_use
         raise HTTPException(
             status_code=413, detail="Avatar too large (limit 3MB raw)."
         )
-    picture = f"data:{req.media_mime or 'image/png'};base64,{req.image_b64}"
+    normalized = bounded_image(req.image_b64)
+    picture_path = await put_media(user["user_id"], base64.b64decode(normalized), 'image/png', 'png')
     await db.users.update_one(
-        {"user_id": user["user_id"]}, {"$set": {"picture": picture}}
+        {"user_id": user["user_id"]}, {"$set": {"picture": None, "picture_storage_path": picture_path}}
     )
     fresh = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
     return {"ok": True, "user": (await user_to_out(fresh)).model_dump()}
@@ -162,7 +168,7 @@ async def avatar_set(req: AvatarSetRequest, user: dict = Depends(get_current_use
 @router.post("/avatar/clear")
 async def avatar_clear(user: dict = Depends(get_current_user)):
     await db.users.update_one(
-        {"user_id": user["user_id"]}, {"$set": {"picture": None}}
+        {"user_id": user["user_id"]}, {"$set": {"picture": None}, "$unset": {"picture_storage_path": ""}}
     )
     fresh = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
     return {"ok": True, "user": (await user_to_out(fresh)).model_dump()}

@@ -105,7 +105,7 @@ export default function Register() {
 
             <View style={styles.card}>
               <Text style={styles.title}>Create your account</Text>
-              <Text style={styles.sub}>5 free generations every single day</Text>
+              <Text testID="registration-credit-intro" style={styles.sub}>100 introductory credits once, subject to funded availability. Valid for 30 days.</Text>
 
               <View style={styles.field}>
                 <User size={18} color={colors.textDim} />
@@ -150,7 +150,7 @@ export default function Register() {
                 <Gift size={18} color={colors.green} />
                 <TextInput
                   testID="reg-referral"
-                  placeholder="Referral code (optional, +20/day for a week)"
+                  placeholder="Referral code (optional)"
                   placeholderTextColor={colors.textMuted}
                   value={referral}
                   onChangeText={(t) => setReferral(t.toUpperCase())}

@@ -13,6 +13,7 @@ import {
   initializeRevenueCat,
   SubscriptionProvider,
 } from '@/src/lib/revenuecat';
+import CreditQuoteModal from '@/src/components/CreditQuoteModal';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -90,6 +91,7 @@ function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <SubscriptionProvider>
+              <CreditQuoteModal />
               <StatusBar style="light" />
               <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#020208' } }}>
                 <Stack.Screen name="index" />

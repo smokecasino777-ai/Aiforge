@@ -5,11 +5,12 @@ import React, {
   useEffect,
   useMemo,
   useState,
+  useRef,
   ReactNode,
 } from 'react';
 
 import { api, User } from '@/src/api/client';
-import { rcLogIn, rcLogOut } from '@/src/lib/revenuecat';
+import { rcLogIn, rcLogOut } from '@/src/lib/billingSdk';
 
 type AuthCtx = {
   user: User | null;
@@ -34,21 +35,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Non-fatal: surfaces as a banner in the Plans screen when RevenueCat
   // identity can't be bound (which would mean a purchase would be anonymous).
   const [purchaseIdentityError, setPurchaseIdentityError] = useState<string | null>(null);
+  const identityQueue = useRef<Promise<void>>(Promise.resolve());
+  const identityEpoch = useRef(0);
 
   const bindRevenueCatIdentity = useCallback(async (uid: string | null) => {
-    if (!uid) {
-      await rcLogOut();
-      setPurchaseIdentityError(null);
-      return;
-    }
-    const bound = await rcLogIn(uid);
-    if (bound && !bound.startsWith('$RCAnonymousID:')) {
-      setPurchaseIdentityError(null);
-    } else {
-      setPurchaseIdentityError(
-        'Could not connect to the subscription service. Purchases are temporarily unavailable — try again shortly.',
-      );
-    }
+    const epoch = ++identityEpoch.current;
+    setPurchaseIdentityError(uid ? 'Connecting your store account. Purchases will be available after verification.' : null);
+    // Serialize SDK identity changes, but never block successful app login
+    // on a slow third-party billing connection.
+    const task = identityQueue.current.catch(() => {}).then(async () => {
+      const bound = uid ? await rcLogIn(uid) : (await rcLogOut(), null);
+      if (epoch !== identityEpoch.current) return;
+      setPurchaseIdentityError(!uid || bound === uid ? null : 'Store connection unavailable. Existing app features remain accessible; purchases are temporarily paused.');
+    });
+    identityQueue.current = task;
+    await task;
   }, []);
 
   const refresh = useCallback(async () => {
@@ -56,16 +57,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const token = await api.getToken();
       if (!token) {
         setUser(null);
-        await bindRevenueCatIdentity(null);
+        void bindRevenueCatIdentity(null);
         return;
       }
       const me = await api.me();
       setUser(me);
-      await bindRevenueCatIdentity(me.id);
+      void bindRevenueCatIdentity(me.id);
     } catch {
       await api.clearToken();
       setUser(null);
-      await bindRevenueCatIdentity(null);
+      void bindRevenueCatIdentity(null);
     }
   }, [bindRevenueCatIdentity]);
 
@@ -81,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const r = await api.login(email, password);
       await api.setToken(r.token);
       setUser(r.user);
-      await bindRevenueCatIdentity(r.user.id);
+      void bindRevenueCatIdentity(r.user.id);
     },
     [bindRevenueCatIdentity],
   );
@@ -96,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const r = await api.register(email, password, name, referralCode);
       await api.setToken(r.token);
       setUser(r.user);
-      await bindRevenueCatIdentity(r.user.id);
+      void bindRevenueCatIdentity(r.user.id);
     },
     [bindRevenueCatIdentity],
   );
@@ -104,7 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     await api.clearToken();
     setUser(null);
-    await bindRevenueCatIdentity(null);
+    void bindRevenueCatIdentity(null);
   }, [bindRevenueCatIdentity]);
 
   const value = useMemo(

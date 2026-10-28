@@ -1,5 +1,5 @@
-import React, { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import React, { useCallback, useRef, useState, useId } from 'react';
+import { ActivityIndicator, StyleSheet, View, Text } from 'react-native';
 import { Volume2, Square } from 'lucide-react-native';
 
 import PressableScale from '@/src/components/PressableScale';
@@ -18,7 +18,6 @@ import { useRouter } from 'expo-router';
  */
 export default function SpeakButton({
   text,
-  isPro,
   voice,
 }: {
   text: string;
@@ -29,12 +28,11 @@ export default function SpeakButton({
   const [loading, setLoading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const router = useRouter();
+  const id = useId().replace(/[^a-z0-9]/gi, '');
+  const [error, setError] = useState('');
 
   const onPress = useCallback(async () => {
-    if (!isPro) {
-      router.push('/(tabs)/plans');
-      return;
-    }
+    setError('');
     if (speaking) {
       stopTts();
       abortRef.current?.abort();
@@ -50,6 +48,7 @@ export default function SpeakButton({
       await speak(text, { voice, signal: ac.signal });
     } catch (e: any) {
       const msg = String(e?.message || '');
+      setError(msg || 'Voice request could not complete.');
       if (msg.includes('Pro') || msg.includes('upgrade')) {
         router.push('/(tabs)/plans');
       }
@@ -57,27 +56,27 @@ export default function SpeakButton({
       setLoading(false);
       setSpeaking(false);
     }
-  }, [text, speaking, isPro, voice, router]);
+  }, [text, speaking, voice, router]);
 
   const Icon = speaking ? Square : Volume2;
 
   return (
-    <PressableScale onPress={onPress}>
-      <View style={[styles.btn, speaking && styles.btnActive, !isPro && styles.btnLocked]}>
+    <View><PressableScale testID={`speak-message-${id}`} onPress={onPress}>
+      <View style={[styles.btn, speaking && styles.btnActive]}>
         {loading ? (
           <ActivityIndicator size="small" color={colors.yellow} />
         ) : (
-          <Icon size={13} color={isPro ? colors.yellow : colors.textDim} />
+          <Icon size={18} color={colors.yellow} />
         )}
       </View>
-    </PressableScale>
+    </PressableScale>{!!error && <Text testID={`speak-error-${id}`} style={{ color: colors.textDim, fontSize: 12 }}>{error}</Text>}</View>
   );
 }
 
 const styles = StyleSheet.create({
   btn: {
-    width: 28,
-    height: 28,
+    width: 44,
+    height: 44,
     borderRadius: 14,
     backgroundColor: 'rgba(255, 215, 0, 0.08)',
     borderWidth: 1,

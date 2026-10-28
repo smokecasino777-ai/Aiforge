@@ -48,7 +48,8 @@ import PressableScale from '@/src/components/PressableScale';
 import PulsingLogo from '@/src/components/Logo';
 import FeatureTour from '@/src/components/FeatureTour';
 import { colors, radius } from '@/src/theme/colors';
-import { api, Creation } from '@/src/api/client';
+import { api, API_URL, Creation } from '@/src/api/client';
+import { uploadForm } from '@/src/utils/upload';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -109,6 +110,9 @@ export default function Editor() {
   const [styleOpen, setStyleOpen] = useState(false);
   const [captionData, setCaptionData] = useState<{ hook: string; caption: string; hashtags: string[] } | null>(null);
   const [videoTrim, setVideoTrim] = useState<{ start: number; end: number }>({ start: 0, end: 12 });
+  const [videoSpeed, setVideoSpeed] = useState(1);
+  const [videoMute, setVideoMute] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
 
   // ----- Source loading -----
   useEffect(() => {
@@ -166,6 +170,8 @@ export default function Editor() {
   };
 
   const resetTransforms = () => {
+    setVideoSpeed(1);
+    setVideoMute(false);
     setRotation(0);
     setFlipH(false);
     setFlipV(false);
@@ -176,14 +182,8 @@ export default function Editor() {
 
   const onPickFile = async () => {
     try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) {
-        Alert.alert(
-          'Permission needed',
-          "AiForge needs access to your photos to import a file. You can change this in Settings.",
-        );
-        return;
-      }
+      // Android Photo Picker grants access to the chosen item, not the
+      // entire media library; no broad storage permission is requested.
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images', 'videos'] as any,
         quality: 0.9,
@@ -339,24 +339,21 @@ export default function Editor() {
           height: stage.h,
         });
       } else if (stage.kind === 'video') {
-        // For video we don't re-encode; we save the original buffer plus a
-        // best-effort trim window. (Server-side video re-encoding is a future
-        // feature requiring ffmpeg.)
-        if (!stage.b64) throw new Error('Video buffer missing');
-        await api.editorSave({
-          media_b64: stage.b64,
-          media_mime: stage.mime,
-          type: 'video',
-          title: `Edited clip (${videoTrim.start}-${videoTrim.end}s)`,
-          prompt: `Trim ${videoTrim.start}-${videoTrim.end}s, ${overlays.length} text overlays`,
-          duration: Math.max(1, videoTrim.end - videoTrim.start),
+        if (overlays.length) throw new Error('Text overlays are image-only. Remove them before video export.');
+        const token = await api.getToken();
+        await uploadForm(`${API_URL}/editor/video/export`, {
+          files: { file: { uri: stage.uri, name: 'source.mp4', mimeType: stage.mime } },
+          fields: { settings: JSON.stringify({ start: videoTrim.start, end: videoTrim.end, rotation: ((rotation % 360) + 360) % 360, flip: flipH, speed: videoSpeed, mute: videoMute }) },
+          headers: { Authorization: `Bearer ${token}` }, timeoutMs: 180000,
         });
       }
+      setSaveMessage('Saved to your Library. Video exports contain the rendered trim and selected settings.');
       Alert.alert('Saved', 'Your edited creation is now in your Library.', [
         { text: 'Stay here', style: 'cancel' },
         { text: 'Go to Library', onPress: () => router.replace('/(tabs)/library' as any) },
       ]);
     } catch (e: any) {
+      setSaveMessage(e.message || 'Could not save. Your original file is unchanged.');
       Alert.alert('Save', e.message || 'Failed');
     } finally {
       setBusy(null);
@@ -389,18 +386,19 @@ export default function Editor() {
             <Zap size={22} color={colors.green} />
             <Text style={styles.title}>EDITOR</Text>
           </View>
-          <Text style={styles.subtitle}>Full image & video editor with AI-powered tools</Text>
+          <Text style={styles.subtitle}>Local image tools, real MP4 exports and separately quoted AI edits</Text>
+          {!!saveMessage && <Text testID="editor-save-status" style={[styles.subtitle, { color: colors.cyan }]}>{saveMessage}</Text>}
 
           {/* Tool grid */}
           <View style={styles.toolGrid}>
             <ToolBtn icon={<Move size={18} color={colors.text} />} label="Move" active={tool === 'move'} onPress={() => applyTool('move')} highlight />
-            <ToolBtn icon={<Crop size={18} color={colors.text} />} label="Crop" active={tool === 'crop'} onPress={() => applyTool('crop')} />
+            <ToolBtn icon={<Crop size={18} color={colors.text} />} label="Crop" active={tool === 'crop'} onPress={() => applyTool('crop')} disabled={stage.kind !== 'image'} />
             <ToolBtn icon={<Scissors size={18} color={colors.text} />} label="Cut" active={tool === 'trim'} onPress={() => applyTool('trim')} disabled={stage.kind !== 'video'} />
             <ToolBtn icon={<RotateCcw size={18} color={colors.text} />} label="Rotate L" onPress={() => applyTool('rotateL')} />
             <ToolBtn icon={<RotateCw size={18} color={colors.text} />} label="Rotate R" onPress={() => applyTool('rotateR')} />
             <ToolBtn icon={<FlipHorizontal size={18} color={colors.text} />} label="Flip H" onPress={() => applyTool('flipH')} />
-            <ToolBtn icon={<FlipVertical size={18} color={colors.text} />} label="Flip V" onPress={() => applyTool('flipV')} />
-            <ToolBtn icon={<TypeIcon size={18} color={colors.text} />} label="Add Text" onPress={() => applyTool('text')} />
+            <ToolBtn icon={<FlipVertical size={18} color={colors.text} />} label="Flip V" onPress={() => applyTool('flipV')} disabled={stage.kind !== 'image'} />
+            <ToolBtn icon={<TypeIcon size={18} color={colors.text} />} label="Add Text" onPress={() => applyTool('text')} disabled={stage.kind !== 'image'} />
             <ToolBtn icon={<RefreshCcw size={18} color={colors.text} />} label="Reset" onPress={() => applyTool('reset')} />
           </View>
 
@@ -502,11 +500,18 @@ export default function Editor() {
 
               {/* Video trim slider */}
               {stage.kind === 'video' && (
+                <View style={{ gap: 14 }}>
                 <VideoTrimBar
                   duration={stage.duration}
                   value={videoTrim}
                   onChange={setVideoTrim}
                 />
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {[0.5, 1, 1.5, 2].map((speed) => <PressableScale key={speed} testID={`video-speed-${speed}`} onPress={() => setVideoSpeed(speed)} style={{ minHeight: 44, padding: 12, borderRadius: 12, backgroundColor: speed === videoSpeed ? colors.cyan + '33' : colors.surface }}><Text style={{ color: colors.text }}>{speed}x</Text></PressableScale>)}
+                  <PressableScale testID="video-mute-toggle" onPress={() => setVideoMute(!videoMute)} style={{ minHeight: 44, padding: 12, borderRadius: 12, backgroundColor: colors.surface }}><Text style={{ color: colors.cyan }}>{videoMute ? 'Muted on export' : 'Keep audio'}</Text></PressableScale>
+                </View>
+                <Text testID="video-export-limits" style={styles.subtitle}>Rendered MP4 · up to 60 seconds per export · 60 MB upload limit. Speed and mute apply to the exported file; playback is a trim preview.</Text>
+                </View>
               )}
 
               {/* Active tool tip */}

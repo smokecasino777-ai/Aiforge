@@ -17,6 +17,8 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from metering import MeteredRoute, current_quote
+from media_storage import store_document_media
 
 from ai_providers import edit_image, generate_text
 from core import (
@@ -30,7 +32,7 @@ from core import (
     now_utc,
 )
 
-router = APIRouter(tags=["editor"])
+router = APIRouter(tags=["editor"], route_class=MeteredRoute)
 
 # ---------- Models ----------
 
@@ -64,6 +66,8 @@ class SaveRequest(BaseModel):
 
 
 async def _check_quota(user: dict) -> None:
+    if current_quote.get() and not current_quote.get().get("legacy"):
+        return
     plan = user.get("plan", "free")
     limit = PLAN_LIMITS.get(plan, 5)
     used = await daily_used(user["user_id"])
@@ -257,5 +261,5 @@ async def editor_save(req: SaveRequest, user: dict = Depends(get_current_user)):
         doc["height"] = req.height
     if req.duration:
         doc["duration"] = req.duration
-    await db.creations.insert_one(doc)
+    await db.creations.insert_one(await store_document_media(doc))
     return {"creation_id": creation_id, "ok": True}

@@ -222,10 +222,7 @@ export function useHoldToTalk() {
       }
       setState('uploading');
       try {
-        const token =
-          Platform.OS !== 'undefined'
-            ? await (await import('@/src/api/client')).api.getToken()
-            : null;
+        const token = await (await import('@/src/api/client')).api.getToken();
         const res = await uploadForm<{ text: string; seconds_est: number }>(
           `${BACKEND_URL}/api/voice/stt`,
           {

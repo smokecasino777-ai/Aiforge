@@ -35,6 +35,7 @@ export default function Home() {
   const [stats, setStats] = useState<Stats>({ image: 0, video: 0, model3d: 0, chat: 0 });
   const [recent, setRecent] = useState<Creation[]>([]);
   const [balance, setBalance] = useState<Balance | null>(null);
+  const [credits, setCredits] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -46,6 +47,8 @@ export default function Home() {
         api.tokensBalance().catch(() => null),
       ]);
       setStats(s);
+      const wallet = await api.creditsWallet().catch(() => null);
+      if (wallet) setCredits(wallet.total);
       setRecent(list.slice(0, 8));
       if (bal) {
         setBalance({
@@ -97,7 +100,7 @@ export default function Home() {
             >
               <Sparkles size={12} color={colors.cyan} />
               <Text style={styles.planChipText}>
-                {(user?.plan || 'free').toUpperCase()}
+                {(user?.credit_plan || user?.plan || 'free').toUpperCase()}
               </Text>
             </PressableScale>
           </View>
@@ -109,16 +112,14 @@ export default function Home() {
               <Text style={{ color: colors.green }}>Forge</Text>
             </Text>
             <Text style={styles.welcomeSub}>
-              Generate stunning images, videos and 3D models with the power of AI.
+              Create images, edit videos and work with real STL geometry. AI tools show an upfront credit quote when available.
             </Text>
 
             <View style={styles.usageRow}>
-              <Text style={styles.usageLabel}>Today&apos;s usage</Text>
-              <Text style={styles.usageValue}>
-                {user?.daily_used ?? 0} / {user?.daily_limit ?? 5}
-              </Text>
+              <Text style={styles.usageLabel}>Available credits</Text>
+              <Text testID="home-credit-balance" style={styles.usageValue}>{credits?.toLocaleString() ?? '—'}</Text>
             </View>
-            <View style={styles.barTrack}>
+            {!user?.credit_catalog_version && <View style={styles.barTrack}>
               <LinearGradient
                 colors={[colors.cyan, colors.green]}
                 start={{ x: 0, y: 0 }}
@@ -130,12 +131,12 @@ export default function Home() {
                   },
                 ]}
               />
-            </View>
+            </View>}
 
-            <FreeTokensBadge
+            {!user?.credit_catalog_version && <FreeTokensBadge
               balance={balance}
               onPress={() => router.push('/(tabs)/plans')}
-            />
+            />}
 
             <GradientButton
               title="Start Creating"
