@@ -43,10 +43,10 @@ JWT_SECRET = os.environ.get("JWT_SECRET", "aiforge-secret-change-me")
 JWT_ALG = "HS256"
 JWT_EXP_DAYS = 7
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "sk_test_emergent")
-ADMIN_EMAIL = (os.environ.get("ADMIN_EMAIL") or "jraycwalker@gmail.com").lower().strip()
+DEFAULT_OWNER_EMAIL = "smokecasino777@gmail.com"
+ADMIN_EMAIL = (os.environ.get("ADMIN_EMAIL") or os.environ.get("OWNER_EMAIL") or DEFAULT_OWNER_EMAIL).lower().strip()
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN") or ""
 GOOGLE_APP_ID = os.environ.get("GOOGLE_APP_ID") or ""
-
 
 
 # Runtime container so /api/admin endpoints can hot-swap the live Stripe key
