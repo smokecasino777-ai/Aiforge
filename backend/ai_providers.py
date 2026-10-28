@@ -1,10 +1,10 @@
 """AI provider layer — Azure AI Foundry first (customer-owned key).
 
-  TEXT   → Azure `gpt-4o` chat deployment (AZURE_DEPLOYMENT).
-  IMAGE  → Azure `gpt-image-1` deployment when AZURE_IMAGE_DEPLOYMENT is set,
-           else Emergent Gemini Nano Banana.
-  VIDEO  → Azure `sora` deployment when AZURE_VIDEO_DEPLOYMENT is set,
-           else Emergent OpenAI sora-2.
+   TEXT   → Azure `gpt-4o` chat deployment (AZURE_DEPLOYMENT).
+   IMAGE  → Azure `gpt-image-1` deployment when AZURE_IMAGE_DEPLOYMENT is set,
+            else Emergent Gemini Nano Banana.
+   VIDEO  → Azure `sora` deployment when AZURE_VIDEO_DEPLOYMENT is set,
+            else Emergent OpenAI sora-2.
 
 To finish moving 100% onto the customer's Azure resource, create the
 `gpt-image-1` and `sora` deployments in Azure AI Foundry and set the two
@@ -29,8 +29,9 @@ AZURE_OPENAI_BASE = (os.environ.get("AZURE_OPENAI_BASE", "") or "").rstrip("/")
 AZURE_CHAT_DEPLOYMENT = os.environ.get("AZURE_DEPLOYMENT", "")
 AZURE_IMAGE_DEPLOYMENT = os.environ.get("AZURE_IMAGE_DEPLOYMENT", "")
 AZURE_VIDEO_DEPLOYMENT = os.environ.get("AZURE_VIDEO_DEPLOYMENT", "")
-OLLAMA_BASE_URL = "https://ollama.com"
-OLLAMA_MODEL = "gemma4:31b"
+OLLAMA_API_KEY = os.environ.get("OLLAMA_API_KEY", "")
+OLLAMA_BASE_URL = (os.environ.get("OLLAMA_BASE_URL", "https://ollama.com") or "https://ollama.com").rstrip("/")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:31b")
 
 _AZ_HEADERS = {"api-key": AZURE_API_KEY}
 
@@ -47,37 +48,53 @@ def azure_video_enabled() -> bool:
     return bool(AZURE_API_KEY and AZURE_OPENAI_BASE and AZURE_VIDEO_DEPLOYMENT)
 
 
+def ollama_text_enabled() -> bool:
+    return bool(OLLAMA_API_KEY and OLLAMA_BASE_URL)
+
+
+async def _chat_with_ollama(system: str, prompt: str) -> str:
+    """Use Ollama's cloud API for open models while keeping the rest of the app intact."""
+    async with httpx.AsyncClient(timeout=120) as client:
+        r = await client.post(
+            f"{OLLAMA_BASE_URL}/api/chat",
+            headers={
+                "Authorization": f"Bearer {OLLAMA_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": OLLAMA_MODEL,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt},
+                ],
+                "stream": False,
+                "options": {"temperature": 0.7},
+            },
+        )
+    if r.status_code == 401:
+        raise RuntimeError("Ollama API authentication failed (check OLLAMA_API_KEY).")
+    if r.status_code == 402:
+        raise RuntimeError("Ollama API requires usage credits to be added.")
+    if r.status_code == 404:
+        raise RuntimeError(f"Ollama model not found: {OLLAMA_MODEL}")
+    if r.status_code == 429:
+        raise RuntimeError("Ollama API rate limit reached.")
+    if r.status_code != 200:
+        raise RuntimeError(f"Ollama chat error {r.status_code}: {r.text[:200]}")
+
+    data = r.json()
+    content = ((data.get("message") or {}).get("content") or "").strip()
+    if not content:
+        raise RuntimeError("Ollama response did not include text content.")
+    return content
+
+
 # ---------------- TEXT ----------------
 async def generate_text(system: str, prompt: str) -> str:
-    """Chat completion. Azure gpt-4o primary; Ollama cloud next; Emergent Claude as fallback."""
-    ollama_api_key = (
-        os.environ.get("OLLAMA_API_KEY")
-        or os.environ.get("OPENAI_API_KEY")
-        or os.environ.get("ANTHROPIC_API_KEY")
-        or ""
-    ).strip()
-
-    if ollama_api_key:
-        async with httpx.AsyncClient(timeout=120) as client:
-            r = await client.post(
-                f"{OLLAMA_BASE_URL}/api/chat",
-                headers={
-                    "Authorization": f"Bearer {ollama_api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": OLLAMA_MODEL,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "stream": False,
-                },
-            )
-        if r.status_code != 200:
-            raise RuntimeError(f"Ollama chat error {r.status_code}: {r.text[:300]}")
-        message = r.json().get("message") or {}
-        return (message.get("content") or "").strip()
+    """Chat completion. Azure gpt-4o primary; Emergent Claude only if Azure
+    text env is not configured at all."""
+    if ollama_text_enabled():
+        return await _chat_with_ollama(system, prompt)
 
     if azure_text_enabled():
         async with httpx.AsyncClient(timeout=90) as client:
