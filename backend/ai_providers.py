@@ -29,6 +29,14 @@ AZURE_OPENAI_BASE = (os.environ.get("AZURE_OPENAI_BASE", "") or "").rstrip("/")
 AZURE_CHAT_DEPLOYMENT = os.environ.get("AZURE_DEPLOYMENT", "")
 AZURE_IMAGE_DEPLOYMENT = os.environ.get("AZURE_IMAGE_DEPLOYMENT", "")
 AZURE_VIDEO_DEPLOYMENT = os.environ.get("AZURE_VIDEO_DEPLOYMENT", "")
+OLLAMA_API_KEY = (
+    os.environ.get("OLLAMA_API_KEY")
+    or os.environ.get("OPENAI_API_KEY")
+    or os.environ.get("ANTHROPIC_API_KEY")
+    or ""
+).strip()
+OLLAMA_BASE_URL = "https://ollama.com"
+OLLAMA_MODEL = "gemma4:31b"
 
 _AZ_HEADERS = {"api-key": AZURE_API_KEY}
 
@@ -47,8 +55,36 @@ def azure_video_enabled() -> bool:
 
 # ---------------- TEXT ----------------
 async def generate_text(system: str, prompt: str) -> str:
-    """Chat completion. Azure gpt-4o primary; Emergent Claude only if Azure
-    text env is not configured at all."""
+    """Chat completion. Azure gpt-4o primary; Ollama cloud next; Emergent Claude as fallback."""
+    ollama_api_key = (
+        os.environ.get("OLLAMA_API_KEY")
+        or os.environ.get("OPENAI_API_KEY")
+        or os.environ.get("ANTHROPIC_API_KEY")
+        or ""
+    ).strip()
+
+    if ollama_api_key:
+        async with httpx.AsyncClient(timeout=120) as client:
+            r = await client.post(
+                f"{OLLAMA_BASE_URL}/api/chat",
+                headers={
+                    "Authorization": f"Bearer {ollama_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": OLLAMA_MODEL,
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "stream": False,
+                },
+            )
+        if r.status_code != 200:
+            raise RuntimeError(f"Ollama chat error {r.status_code}: {r.text[:300]}")
+        message = r.json().get("message") or {}
+        return (message.get("content") or "").strip()
+
     if azure_text_enabled():
         async with httpx.AsyncClient(timeout=90) as client:
             r = await client.post(
