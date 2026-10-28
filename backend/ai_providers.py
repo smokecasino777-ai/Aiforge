@@ -29,12 +29,6 @@ AZURE_OPENAI_BASE = (os.environ.get("AZURE_OPENAI_BASE", "") or "").rstrip("/")
 AZURE_CHAT_DEPLOYMENT = os.environ.get("AZURE_DEPLOYMENT", "")
 AZURE_IMAGE_DEPLOYMENT = os.environ.get("AZURE_IMAGE_DEPLOYMENT", "")
 AZURE_VIDEO_DEPLOYMENT = os.environ.get("AZURE_VIDEO_DEPLOYMENT", "")
-OLLAMA_API_KEY = (
-    os.environ.get("OLLAMA_API_KEY")
-    or os.environ.get("OPENAI_API_KEY")
-    or os.environ.get("ANTHROPIC_API_KEY")
-    or ""
-).strip()
 OLLAMA_BASE_URL = "https://ollama.com"
 OLLAMA_MODEL = "gemma4:31b"
 
