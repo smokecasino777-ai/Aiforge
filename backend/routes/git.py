@@ -1,68 +1,133 @@
-import subprocess
+import base64
 import os
+import subprocess
+from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
+
 from fastapi import APIRouter, Depends, HTTPException
-from core import ensure_admin, get_current_user, logger, GITHUB_TOKEN
+from core import ensure_admin, get_current_user, GITHUB_TOKEN
 
 router = APIRouter(tags=["git"])
 
-def _get_authenticated_url(url: str) -> str:
-    if not GITHUB_TOKEN or "github.com" not in url:
-        return url
-    # Replace https://github.com/... with https://<token>@github.com/...
-    if url.startswith("https://"):
-        return url.replace("https://", f"https://{GITHUB_TOKEN}@")
+# Git commands must run from the checkout root, not from whichever directory
+# the API server happened to be launched in (often `backend/`).
+REPO_ROOT = Path(__file__).resolve().parents[2]
+GIT_TIMEOUT_SECONDS = 120
+
+
+def _git_env() -> dict:
+    """Disable interactive credential prompts and pass GitHub auth securely."""
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+
+    # Use an HTTP header rather than putting the token in the remote URL or
+    # command-line arguments, where it could be logged or exposed in process
+    # listings. This also leaves the configured `origin` URL untouched.
+    if GITHUB_TOKEN:
+        try:
+            config_count = int(env.get("GIT_CONFIG_COUNT", "0"))
+        except ValueError:
+            config_count = 0
+        env["GIT_CONFIG_COUNT"] = str(config_count + 1)
+        env[f"GIT_CONFIG_KEY_{config_count}"] = "http.https://github.com/.extraheader"
+        credential = base64.b64encode(f"x-access-token:{GITHUB_TOKEN}".encode()).decode()
+        env[f"GIT_CONFIG_VALUE_{config_count}"] = f"AUTHORIZATION: basic {credential}"
+
+    return env
+
+
+def _run_git(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", *args],
+        cwd=REPO_ROOT,
+        env=_git_env(),
+        capture_output=True,
+        text=True,
+        timeout=GIT_TIMEOUT_SECONDS,
+        check=False,
+    )
+
+
+def _git_output(*args: str) -> str:
+    result = _run_git(*args)
+    if result.returncode != 0:
+        message = (result.stderr or result.stdout).strip()
+        raise RuntimeError(message or f"git {' '.join(args)} failed")
+    return result.stdout.strip()
+
+
+def _safe_remote_url(url: str) -> str:
+    """Remove embedded HTTP credentials before returning a remote to clients."""
+    parts = urlsplit(url)
+    if parts.scheme and parts.hostname and (parts.username or parts.password):
+        host = parts.hostname
+        if parts.port:
+            host = f"{host}:{parts.port}"
+        return urlunsplit((parts.scheme, host, parts.path, parts.query, parts.fragment))
     return url
+
+
+def _current_branch() -> str:
+    branch = _git_output("branch", "--show-current")
+    if not branch:
+        raise RuntimeError("The checkout is in a detached HEAD state; switch to a branch before syncing.")
+    return branch
+
+
+def _sync_error(result: subprocess.CompletedProcess) -> HTTPException:
+    output = (result.stdout + result.stderr).strip()
+    return HTTPException(status_code=502, detail=output or "Git remote operation failed.")
+
 
 @router.get("/admin/git/status")
 async def git_status(user: dict = Depends(get_current_user)):
     await ensure_admin(user)
     try:
-        # Use a custom env to prevent git from prompting for credentials
-        git_env = os.environ.copy()
-        git_env["GIT_TERMINAL_PROMPT"] = "0"
-
-        res = subprocess.run(["git", "status", "--short"], capture_output=True, text=True, check=True, env=git_env)
-        log = subprocess.run(["git", "log", "-n", "1", "--oneline"], capture_output=True, text=True, check=True, env=git_env)
-        branch = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True, check=True, env=git_env)
-        remote_res = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, env=git_env)
-        remote_url = remote_res.stdout.strip()
-
+        status = _git_output("status", "--short")
+        last_commit = _git_output("log", "-n", "1", "--oneline")
+        branch = _current_branch()
+        remote = _safe_remote_url(_git_output("remote", "get-url", "origin"))
         return {
-            "status": res.stdout,
-            "last_commit": log.stdout.strip(),
-            "branch": branch.stdout.strip(),
-            "remote": remote_url.split("@")[-1] if "@" in remote_url else remote_url
+            "status": status,
+            "last_commit": last_commit,
+            "branch": branch,
+            "remote": remote,
         }
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Timed out while reading Git status.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/git/pull")
 async def git_pull(user: dict = Depends(get_current_user)):
     await ensure_admin(user)
     try:
-        branch_res = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True, check=True)
-        branch = branch_res.stdout.strip()
-
-        remote_res = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True)
-        remote_url = _get_authenticated_url(remote_res.stdout.strip())
-
-        res = subprocess.run(["git", "pull", remote_url, branch], capture_output=True, text=True)
-        return {"output": res.stdout + res.stderr}
+        branch = _current_branch()
+        result = _run_git("pull", "--ff-only", "origin", branch)
+        if result.returncode != 0:
+            raise _sync_error(result)
+        return {"output": result.stdout + result.stderr}
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Timed out while pulling from GitHub.")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/admin/git/push")
 async def git_push(user: dict = Depends(get_current_user)):
     await ensure_admin(user)
     try:
-        branch_res = subprocess.run(["git", "branch", "--show-current"], capture_output=True, text=True, check=True)
-        branch = branch_res.stdout.strip()
-
-        remote_res = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True)
-        remote_url = _get_authenticated_url(remote_res.stdout.strip())
-
-        res = subprocess.run(["git", "push", remote_url, branch], capture_output=True, text=True)
-        return {"output": res.stdout + res.stderr}
+        branch = _current_branch()
+        result = _run_git("push", "origin", branch)
+        if result.returncode != 0:
+            raise _sync_error(result)
+        return {"output": result.stdout + result.stderr}
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Timed out while pushing to GitHub.")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
