@@ -1,6 +1,9 @@
 import { storage } from '@/src/utils/storage';
 
-const BASE = process.env.EXPO_PUBLIC_BACKEND_URL as string;
+// Expo injects EXPO_PUBLIC_* values at build time. Keep a working preview
+// default so local/AI Studio builds don't construct requests to `undefined/api`.
+const DEFAULT_BACKEND_URL = 'https://fierce-forge-ios.preview.emergentagent.com';
+const BASE = (process.env.EXPO_PUBLIC_BACKEND_URL?.trim() || DEFAULT_BACKEND_URL).replace(/\/+$/, '');
 const API = `${BASE}/api`;
 const TOKEN_KEY = 'aiforge_token';
 
@@ -62,7 +65,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       : {}),
     ...(init.headers as Record<string, string> | undefined),
   };
-  const res = await fetch(`${API}${path}`, { ...init, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${API}${path}`, { ...init, headers });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Network request failed';
+    throw new Error(`Could not connect to AiForge. Check your internet connection and backend URL (${BASE}). ${message}`);
+  }
   if (!res.ok) {
     let detail = `Request failed: ${res.status}`;
     try {
